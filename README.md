@@ -5,8 +5,6 @@
 This project turns pictures into illustrations drawn by a fourier transform epicycles machine.
 
 <img src="images/1.original/pomegranate.PNG" width="300">
-
-
 https://github.com/user-attachments/assets/c376fff1-5901-4441-a69e-c1933f5ce42a
 
 
@@ -56,7 +54,7 @@ With vpype processing the paths are clearly much cleaner:
 
 Now following the algorithm for fourier transform epicycles ([fourier.js](https://github.com/qwistaycat/literate-doodle/blob/main/fourier/fourier.js)), we draw it ([sketch.js](https://github.com/qwistaycat/literate-doodle/blob/main/fourier/sketch.js)) and it produces the final result!
 
-[insert gif here]
+https://github.com/user-attachments/assets/c376fff1-5901-4441-a69e-c1933f5ce42a
 
 
 # Further Exploration
