@@ -4,8 +4,10 @@
 ## What
 This project turns pictures into illustrations drawn by a fourier transform epicycles machine.
 
-[pomegranate image] [demo video here]
-[demo link here]
+
+<img src="images/1.original/pomegranate.PNG" width="300">
+ [demo gif here]
+
 
 ## Inspiration
 [desmosit lol]
@@ -52,7 +54,8 @@ With vpype processing the paths are clearly much cleaner:
 
 Now following the algorithm for fourier transform epicycles ([fourier.js](https://github.com/qwistaycat/literate-doodle/blob/main/fourier/fourier.js)), we draw it ([sketch.js](https://github.com/qwistaycat/literate-doodle/blob/main/fourier/sketch.js)) and it produces the final result!
 
-[insert video here]
+[insert gif here]
+
 
 # Further Exploration
 I was curious to see just how far I can take it so I tried to use this really complex ink pen drawing of a tree...
