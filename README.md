@@ -70,7 +70,7 @@ but upon converting to coordinates for the epicycles, it completely crashed, pro
 
 I tried for another image with complexity in between the pomegranate and the tree, and here's the final result!
 
-
+youtube.com/watch?v=2OK_SXe4AyY&feature=youtu.be
 
 
 
