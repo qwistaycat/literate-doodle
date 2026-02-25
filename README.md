@@ -70,35 +70,11 @@ but upon converting to coordinates for the epicycles, it completely crashed, pro
 
 I tried for another image with complexity in between the pomegranate and the tree, and here's the final result!
 
-youtube.com/watch?v=2OK_SXe4AyY&feature=youtu.be
-
-
-
-
-
-
+[https://youtu.be/2OK_SXe4AyY?si=oFhNePGlt-rYSGb2
+](https://youtu.be/2OK_SXe4AyY?si=oFhNePGlt-rYSGb2)
 
 
 ## Acknowledgements
 
 Got through with a lot of Claude Code Opus 4.6 and coffee.
 Golan really helped me find the overall strategy for this workflow and pointers to all the resources I used, and Leslie showed me the resource for [Prepping SVGs for Plotting with vpype](https://github.com/golanlevin/DrawingWithMachines/blob/main/generating_svg/vpype_svg_prep/README.md#prepping-svgs-for-plotting-with-vpype).
-
-
-
-
-
-
-
-
-
-## Project Structure
-The project consists of the following files:
-
-- **fourier/index.html**: Sets up the HTML structure for the application, including links to the p5.js library, a CSS stylesheet, and JavaScript files.
-- **fourier/style.css**: Contains styles for the application, defining the visual appearance of the interface.
-- **fourier/ct.js**: Contains additional functionality or utilities related to the project, possibly for handling complex numbers or other mathematical operations.
-- **fourier/fourier.js**: Defines the `Complex` class for handling complex numbers and the `dft` function for performing the Discrete Fourier Transform on a set of coordinates. This file will be adjusted to accept coordinates extracted from the SVG file.
-- **fourier/sketch.js**: Contains the main p5.js sketch. It sets up the canvas, processes the Fourier Transform of the coordinates, and draws the epicycles. This file will be modified to read coordinates from the SVG and visualize them correctly.
-- **fourier/svg-parser.js**: A new file that will parse the `outputfile.svg` and extract the coordinates in the correct order for use in the Fourier visualization.
-- **fourier/outputfile.svg**: Contains the SVG image that will be parsed to extract the drawing coordinates for the Fourier epicycle visualization.
