@@ -1,0 +1,32 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+}
+canvas {
+  display: block;
+}
+#controls {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  display: flex;
+  gap: 10px;
+}
+#controls button, #controls label {
+  background: #333;
+  color: #fff;
+  border: 1px solid #666;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: sans-serif;
+}
+#controls button:hover, #controls label:hover {
+  background: #555;
+}
+#svg-upload {
+  display: none;
+}

@@ -1,0 +1,14 @@
+# Python virtual environment
+myDwMPy310Venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# vite
+.vite/
