@@ -9,12 +9,10 @@ This project turns pictures into illustrations drawn by a fourier transform epic
 https://github.com/user-attachments/assets/c376fff1-5901-4441-a69e-c1933f5ce42a
 
 
-
 ## Inspiration
-[desmosit lol]
+Originally, I had the idea for a long-abandoned project long ago about plotting images on a graphic calculator from pictures taken. 
 
 ## PROCESS
-
 Here's an overview of the process:
 1. Find a picture
 2. Blur the image (gaussian blur)
@@ -37,9 +35,7 @@ I processed it in TEED for edge detection, which then looked like this:
 <img src="images/2.TEED_images/TEEDpom.png" width="300">
 
 ### ***a pain point***
-I originally had struggles converting to an svg from this png because I naively thought using any online converter would work. However, some produced artifacts, and others would outline the outline, double counting the paths I need. In order to get the correct result, I used a skeleton tracing tool to get this result:
-
-<img src="images/3.skeleton_images/skeleton.svg" width="300">
+I originally had struggles converting to an svg from this png because I naively thought using any online converter would work. However, some produced artifacts, and others would outline the outline, double counting the paths I need. In order to get the correct result, I used a skeleton tracing tool to get the svg.
 
 Before that, I had to process the image to be purely binary colors with black and white to feed into the tracer:
 
