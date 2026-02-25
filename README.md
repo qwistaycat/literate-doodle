@@ -4,9 +4,11 @@
 ## What
 This project turns pictures into illustrations drawn by a fourier transform epicycles machine.
 
-
 <img src="images/1.original/pomegranate.PNG" width="300">
- [demo gif here]
+
+
+https://github.com/user-attachments/assets/c376fff1-5901-4441-a69e-c1933f5ce42a
+
 
 
 ## Inspiration
