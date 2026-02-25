@@ -72,7 +72,6 @@ I tried for another image with complexity in between the pomegranate and the tre
 
 [https://youtu.be/2OK_SXe4AyY?si=oFhNePGlt-rYSGb2
 ](https://youtu.be/2OK_SXe4AyY?si=oFhNePGlt-rYSGb2)
-<iframe width="560" height="315" src="https://www.youtube.com/embed/2OK_SXe4AyY?si=Vw9Db399ZWZX9FHk" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 
 ## Acknowledgements
