@@ -60,12 +60,12 @@ Now following the algorithm for fourier transform epicycles ([fourier.js](https:
 # Further Exploration
 I was curious to see just how far I can take it so I tried to use this really complex ink pen drawing of a tree...
 
-<img src="images/1.original/inktree.JPG" width="300">
+<img src="images/1.original/inktree.JPG" width="500">
 
 ... and it was successful during TEED edge detection and skeletonization...
 
-<img src="images/2.TEED_images/TEEDtree.png" width="300">
-<img src="images/3.skeleton_images/treeskeleton.png" width="300">
+<img src="images/2.TEED_images/TEEDtree.png" width="500">
+<img src="images/3.skeleton_images/treeskeleton.png" width="500">
 
 but upon converting to coordinates for the epicycles, it completely crashed, probably due to too many points.
 
