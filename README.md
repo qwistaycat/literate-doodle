@@ -2,7 +2,7 @@
 "Great repository names are short and memorable. How about literate-doodle?" Thanks github for the coincidentally amazing title!
 
 ## What
-This project turns pictures into illustrations drawn by a fourier transform epicycles machine.
+This project turns pictures + photos into illustrations drawn by a fourier transform epicycles machine.
 
 <img src="images/1.original/pomegranate.PNG" width="300">
 
@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/c376fff1-5901-4441-a69e-c1933f5ce42a
 
 
 ## Inspiration
-Originally, I had the idea for a long-abandoned project long ago about plotting images on a graphic calculator from pictures taken. 
+Originally, I had the idea for a project long ago about plotting images on a graphic calculator from pictures taken. 
 
 ## PROCESS
 Here's an overview of the process:
