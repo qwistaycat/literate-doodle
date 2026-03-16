@@ -12,6 +12,7 @@ canvas {
   left: 10px;
   z-index: 100;
   display: flex;
+  align-items: center;
   gap: 10px;
 }
 #controls button, #controls label {
@@ -23,6 +24,11 @@ canvas {
   cursor: pointer;
   border-radius: 4px;
   font-family: sans-serif;
+}
+#controls input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #9bb7ff;
 }
 #controls button:hover, #controls label:hover {
   background: #555;

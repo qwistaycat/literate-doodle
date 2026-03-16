@@ -136,22 +136,168 @@ function parseSVGText(svgText) {
   return points;
 }
 
-// Fetch svg from the server and parse it
-function loadSVGToDrawing(callback) {
-  fetch("heatedvpype.svg?t=" + Date.now())
+function fetchSVGPoints(svgPath, callback) {
+  var url = svgPath + "?t=" + Date.now();
+  fetch(url)
     .then(function (response) {
       if (!response.ok) throw new Error("Could not load svg: " + response.status);
       return response.text();
     })
     .then(function (svgText) {
       var points = parseSVGText(svgText);
-      if (callback) callback(points);
+      callback(null, points);
     })
     .catch(function (err) {
-      console.error("Error loading SVG:", err);
-      console.error("Make sure you run a local server: python3 -m http.server 8000");
-      if (callback) callback([]);
+      callback(err, []);
     });
+}
+
+function fetchFirstAvailableSVG(paths, callback, index) {
+  var idx = typeof index === "number" ? index : 0;
+  if (!paths || idx >= paths.length) {
+    callback(new Error("No SVG path could be loaded"), []);
+    return;
+  }
+
+  fetchSVGPoints(paths[idx], function (err, points) {
+    if (!err && points.length > 0) {
+      callback(null, points);
+      return;
+    }
+    fetchFirstAvailableSVG(paths, callback, idx + 1);
+  });
+}
+
+var namedDrawingsLoadState = null;
+
+function getDefaultLoadState() {
+  return {
+    heatedOk: typeof drawingHeated !== "undefined" && drawingHeated.length > 0,
+    pomOk: typeof drawingPom !== "undefined" && drawingPom.length > 0,
+    blackberryOk: typeof drawingBlackberry !== "undefined" && drawingBlackberry.length > 0,
+    heatedError: null,
+    pomError: null,
+    blackberryError: null
+  };
+}
+
+function ensureNamedDrawingsLoaded(done) {
+  if (namedDrawingsLoadState) {
+    if (done) done(namedDrawingsLoadState);
+    return;
+  }
+
+  namedDrawingsLoadState = getDefaultLoadState();
+
+  if (namedDrawingsLoadState.heatedOk && namedDrawingsLoadState.pomOk && namedDrawingsLoadState.blackberryOk) {
+    if (done) done(namedDrawingsLoadState);
+    return;
+  }
+
+  var heatedPaths = ["heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"];
+  var pomPaths = ["pomvpype.svg", "../images/4.vpype/pomvpype.svg"];
+  var blackberryPaths = ["blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"];
+
+  fetchFirstAvailableSVG(heatedPaths, function (err, points) {
+    if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
+      drawingHeated = points;
+      namedDrawingsLoadState.heatedOk = true;
+      namedDrawingsLoadState.heatedError = null;
+    } else {
+      namedDrawingsLoadState.heatedOk = false;
+      namedDrawingsLoadState.heatedError = err || new Error("No heated points found");
+    }
+
+    fetchFirstAvailableSVG(pomPaths, function (pomErr, pomPoints) {
+      if (!pomErr && pomPoints.length > 0 && typeof drawingPom !== "undefined") {
+        drawingPom = pomPoints;
+        namedDrawingsLoadState.pomOk = true;
+        namedDrawingsLoadState.pomError = null;
+      } else {
+        namedDrawingsLoadState.pomOk = false;
+        namedDrawingsLoadState.pomError = pomErr || new Error("No pom points found");
+      }
+
+      fetchFirstAvailableSVG(blackberryPaths, function (blackberryErr, blackberryPoints) {
+        if (!blackberryErr && blackberryPoints.length > 0 && typeof drawingBlackberry !== "undefined") {
+          drawingBlackberry = blackberryPoints;
+          namedDrawingsLoadState.blackberryOk = true;
+          namedDrawingsLoadState.blackberryError = null;
+        } else {
+          namedDrawingsLoadState.blackberryOk = false;
+          namedDrawingsLoadState.blackberryError = blackberryErr || new Error("No blackberry points found");
+        }
+
+        if (done) {
+          done(namedDrawingsLoadState);
+        }
+      });
+    });
+  });
+}
+
+function loadNamedDrawing(selection, callback) {
+  if (selection === "heated") {
+    if (typeof drawingHeated !== "undefined" && drawingHeated.length > 0) {
+      callback(drawingHeated);
+      return;
+    }
+    fetchFirstAvailableSVG(["heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"], function (err, points) {
+      if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
+        drawingHeated = points;
+      }
+      callback(points);
+    });
+    return;
+  }
+
+  if (selection === "pom") {
+    if (typeof drawingPom !== "undefined" && drawingPom.length > 0) {
+      callback(drawingPom);
+      return;
+    }
+    fetchFirstAvailableSVG(["pomvpype.svg", "../images/4.vpype/pomvpype.svg"], function (err, points) {
+      if (!err && points.length > 0 && typeof drawingPom !== "undefined") {
+        drawingPom = points;
+      }
+      callback(points);
+    });
+    return;
+  }
+
+  if (selection === "blackberry") {
+    if (typeof drawingBlackberry !== "undefined" && drawingBlackberry.length > 0) {
+      callback(drawingBlackberry);
+      return;
+    }
+    fetchFirstAvailableSVG(["blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"], function (err, points) {
+      if (!err && points.length > 0 && typeof drawingBlackberry !== "undefined") {
+        drawingBlackberry = points;
+      }
+      callback(points);
+    });
+    return;
+  }
+
+  if (selection === "outputfile") {
+    loadSVGToDrawing(callback);
+    return;
+  }
+
+  callback([]);
+}
+
+// Fetch svg from the server and parse it
+function loadSVGToDrawing(callback) {
+  fetchSVGPoints("outputfile.svg", function (err, points) {
+    if (!err && points.length > 0) {
+      if (callback) callback(points);
+      return;
+    }
+    console.error("Error loading outputfile.svg:", err || "No points found");
+    console.error("Make sure you run a local server: python3 -m http.server 8000");
+    if (callback) callback([]);
+  });
 }
 
 // Parse an SVG from a File object (for upload)
@@ -163,3 +309,5 @@ function loadSVGFromFile(file, callback) {
   };
   reader.readAsText(file);
 }
+
+ensureNamedDrawingsLoaded();

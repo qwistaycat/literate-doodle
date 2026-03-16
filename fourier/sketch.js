@@ -4,11 +4,57 @@ var time = 0;
 var path = [];
 var drawing = [];
 var loading = true;
+var loadError = "";
+var drawingChoice = "outputfile";
+var showPenUp = true;
+
+function blackberryStrokeColor(px, py) {
+  var nx = constrain(px / width, 0, 1);
+  var ny = constrain(py / height, 0, 1);
+
+  var drift = frameCount * 0.003;
+  var shiftedX = constrain(nx + 0.08 * Math.sin(drift + ny * 3.2), 0, 1);
+  var shiftedY = constrain(ny + 0.05 * Math.cos(drift * 0.7 + nx * 2.1), 0, 1);
+
+  var budGreen = color(121, 171, 94);
+  var blossomCream = color(243, 232, 206);
+  var berryRed = color(156, 34, 76);
+  var berryPurple = color(89, 38, 132);
+
+  var leftBlend = lerpColor(budGreen, blossomCream, 0.35 + 0.25 * (1 - shiftedY));
+  var horizontalBlend = lerpColor(leftBlend, berryRed, shiftedX);
+  return lerpColor(horizontalBlend, berryPurple, shiftedY * 0.9);
+}
+
+function loadSelectedDrawing(forceReload) {
+  loading = true;
+  loadError = "";
+
+  if (forceReload) {
+    if (drawingChoice === "outputfile") {
+      loadSVGToDrawing(processPoints);
+      return;
+    }
+    if (drawingChoice === "heated" && typeof drawingHeated !== "undefined") {
+      drawingHeated = [];
+    }
+    if (drawingChoice === "pom" && typeof drawingPom !== "undefined") {
+      drawingPom = [];
+    }
+    if (drawingChoice === "blackberry" && typeof drawingBlackberry !== "undefined") {
+      drawingBlackberry = [];
+    }
+  }
+
+  loadNamedDrawing(drawingChoice, processPoints);
+}
 
 // Process raw points into Fourier data and start animation
 function processPoints(points) {
   if (points.length === 0) {
     console.error("No points found in SVG!");
+    loadError = "Could not load any SVG points. Upload an SVG or reload.";
+    loading = false;
     return;
   }
 
@@ -17,6 +63,7 @@ function processPoints(points) {
   path = [];
   time = 0;
   loading = true;
+  loadError = "";
   drawing = points;
 
   // Center and scale to fit canvas
@@ -51,13 +98,29 @@ function setup() {
   createCanvas(800, 600);
   background(0);
 
-  // Initial load
-  loadSVGToDrawing(processPoints);
+  var select = document.getElementById("drawing-select");
+  if (select) {
+    drawingChoice = select.value;
+    select.addEventListener("change", function (e) {
+      drawingChoice = e.target.value;
+      loadSelectedDrawing(false);
+    });
+  }
 
-  // Reload button — re-fetches outputfile.svg (cache-busted)
+  var penUpToggle = document.getElementById("penup-toggle");
+    showPenUp = penUpToggle.checked;
+    penUpToggle.addEventListener("change", function (e) {
+      showPenUp = e.target.checked;
+    });
+  }
+
+  ensureNamedDrawingsLoaded(function () {
+    loadSelectedDrawing(false);
+  });
+
+  // Reload selected drawing from SVG source
   document.getElementById("reload-btn").addEventListener("click", function () {
-    loading = true;
-    loadSVGToDrawing(processPoints);
+    loadSelectedDrawing(true);
   });
 
   // File upload — load any SVG from disk
@@ -65,6 +128,7 @@ function setup() {
     var file = e.target.files[0];
     if (file) {
       loading = true;
+      loadError = "";
       loadSVGFromFile(file, processPoints);
     }
   });
@@ -79,10 +143,17 @@ function epicycles(ex, ey, rotation, fourier) {
     var phase = fourier[i].phase;
     ex += radius * cos(freq * time + phase + rotation);
     ey += radius * sin(freq * time + phase + rotation);
-    stroke(255, 100);
+
+    var displayRadius = radius < 1.25 ? 1.25 : radius;
+    var circleAlpha = radius < 2 ? 240 : (radius < 6 ? 190 : 110);
+    var circleWeight = radius < 2 ? 1.8 : (radius < 6 ? 1.4 : 1.0);
+
+    stroke(255, circleAlpha);
+    strokeWeight(circleWeight);
     noFill();
-    ellipse(prevx, prevy, radius * 2);
+    ellipse(prevx, prevy, displayRadius * 2);
     stroke(255);
+    strokeWeight(1);
     line(prevx, prevy, ex, ey);
   }
   return createVector(ex, ey);
@@ -99,6 +170,15 @@ function draw() {
     return;
   }
 
+  if (loadError || !fourierX || fourierX.length === 0) {
+    fill(255, 120, 120);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(16);
+    text(loadError || "SVG failed to load.", width / 2, height / 2);
+    return;
+  }
+
   var v = epicycles(width / 2, height / 2, 0, fourierX);
   // Determine if current time maps to a bridge point
   var currentIndex = Math.floor((time / TWO_PI) * fourierX.length);
@@ -109,14 +189,19 @@ function draw() {
 
   // Draw the traced path, using different styles for pen-down vs pen-up
   noFill();
-  var inBridge = false;
   for (var i = 0; i < path.length - 1; i++) {
     var isBridge = path[i].bridge || path[i + 1].bridge;
+    var midX = (path[i].x + path[i + 1].x) * 0.5;
+    var midY = (path[i].y + path[i + 1].y) * 0.5;
     if (isBridge) {
-      stroke(100, 150, 255);  // light blue for pen-up
+      if (!showPenUp) {
+        continue;
+      }
+      stroke(100, 150, 255, 220);  // light blue for pen-up
       strokeWeight(0.5);
     } else {
-      stroke(255, 0, 255);  // magenta for pen-down
+      var gradColor = blackberryStrokeColor(midX, midY);
+      stroke(red(gradColor), green(gradColor), blue(gradColor), 245);
       strokeWeight(2);
     }
     line(path[i].x, path[i].y, path[i + 1].x, path[i + 1].y);
