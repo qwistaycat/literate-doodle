@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.2.0/p5.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <div id="controls">
+      <label for="drawing-select">Drawing</label>
+      <select id="drawing-select">
+        <option value="outputfile">Outputfile</option>
+        <option value="heated">Heated</option>
+        <option value="pom">Pom</option>
+        <option value="blackberry">Blackberry</option>
+      </select>
+      <label for="penup-toggle">Show pen-up</label>
+      <input type="checkbox" id="penup-toggle" checked />
+      <label for="epicycle-slider">Detail</label>
+      <input type="range" id="epicycle-slider" min="1" max="1" value="1" />
+      <span id="epicycle-slider-value">1</span>
+    </div>
+    <script src="ct.js?v=20260316"></script>
+    <script src="svg-parser.js?v=20260316"></script>
+    <script src="fourier.js?v=20260316"></script>
+    <script src="sketch.js?v=20260316"></script>
+  </body>
+</html>

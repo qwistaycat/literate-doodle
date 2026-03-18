@@ -194,9 +194,9 @@ function ensureNamedDrawingsLoaded(done) {
     return;
   }
 
-  var heatedPaths = ["heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"];
-  var pomPaths = ["pomvpype.svg", "../images/4.vpype/pomvpype.svg"];
-  var blackberryPaths = ["blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"];
+  var heatedPaths = ["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"];
+  var pomPaths = ["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"];
+  var blackberryPaths = ["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"];
 
   fetchFirstAvailableSVG(heatedPaths, function (err, points) {
     if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
@@ -242,7 +242,7 @@ function loadNamedDrawing(selection, callback) {
       callback(drawingHeated);
       return;
     }
-    fetchFirstAvailableSVG(["heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
         drawingHeated = points;
       }
@@ -256,7 +256,7 @@ function loadNamedDrawing(selection, callback) {
       callback(drawingPom);
       return;
     }
-    fetchFirstAvailableSVG(["pomvpype.svg", "../images/4.vpype/pomvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingPom !== "undefined") {
         drawingPom = points;
       }
@@ -270,7 +270,7 @@ function loadNamedDrawing(selection, callback) {
       callback(drawingBlackberry);
       return;
     }
-    fetchFirstAvailableSVG(["blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingBlackberry !== "undefined") {
         drawingBlackberry = points;
       }
@@ -289,7 +289,7 @@ function loadNamedDrawing(selection, callback) {
 
 // Fetch svg from the server and parse it
 function loadSVGToDrawing(callback) {
-  fetchSVGPoints("outputfile.svg", function (err, points) {
+  fetchFirstAvailableSVG(["../outputfile.svg", "outputfile.svg"], function (err, points) {
     if (!err && points.length > 0) {
       if (callback) callback(points);
       return;

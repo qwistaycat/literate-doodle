@@ -30,6 +30,15 @@ canvas {
   height: 16px;
   accent-color: #9bb7ff;
 }
+#epicycle-slider {
+  width: 140px;
+}
+#epicycle-slider-value {
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 13px;
+  min-width: 56px;
+}
 #controls button:hover, #controls label:hover {
   background: #555;
 }
