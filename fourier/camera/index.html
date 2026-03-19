@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fourier Camera Prototype</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="controls">
+      <button id="camera-toggle">Start Camera</button>
+      <label for="edge-threshold">Edge</label>
+      <input id="edge-threshold" type="range" min="20" max="255" value="90" />
+      <span id="edge-threshold-value">90</span>
+
+      <label for="coeff-count">Epicycles</label>
+      <input id="coeff-count" type="range" min="20" max="300" value="120" />
+      <span id="coeff-count-value">120</span>
+
+      <label for="live-speed">Speed</label>
+      <input id="live-speed" type="range" min="0.2" max="3" step="0.1" value="1" />
+      <span id="live-speed-value">1.0x</span>
+
+      <label for="update-rate">Refresh</label>
+      <input id="update-rate" type="range" min="80" max="1200" step="20" value="220" />
+      <span id="update-rate-value">220ms</span>
+    </div>
+
+    <canvas id="main-canvas" width="1000" height="700"></canvas>
+
+    <div id="hud">
+      <span id="status">Camera idle</span>
+      <span id="stats">No signal</span>
+    </div>
+
+    <video id="camera-video" autoplay playsinline muted></video>
+    <canvas id="process-canvas" width="220" height="165"></canvas>
+
+    <script src="../time/fourier.js?v=20260318"></script>
+    <script src="app.js?v=20260318"></script>
+  </body>
+</html>
