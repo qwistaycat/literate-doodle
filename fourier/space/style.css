@@ -59,8 +59,34 @@ canvas {
   background: #23232e;
 }
 
+#controls .hint {
+  color: #ded3ef;
+  background: rgba(28, 20, 38, 0.8);
+  border: 1px solid #5e4c78;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: sans-serif;
+  font-size: 11px;
+}
+
+#selected-ring-info {
+  color: #ffe8ba;
+  border-color: #8d6a2c;
+  background: rgba(50, 36, 12, 0.78);
+  min-width: 180px;
+  text-align: center;
+}
+
 #epicycle-slider {
   width: 190px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+#zoom-slider {
+  width: 140px;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
@@ -71,10 +97,21 @@ canvas {
   outline: none;
 }
 
+#zoom-slider:focus {
+  outline: none;
+}
+
 #epicycle-slider::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 999px;
   background: linear-gradient(90deg, #6f7f5a 0%, #d8c9a8 45%, #9a2d5f 100%);
+  border: 1px solid #464646;
+}
+
+#zoom-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5b6fb3 0%, #88c3d6 50%, #d4d9ef 100%);
   border: 1px solid #464646;
 }
 
@@ -89,10 +126,28 @@ canvas {
   box-shadow: 0 0 0 3px rgba(127, 74, 143, 0.2);
 }
 
+#zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #f5f1e8;
+  border: 2px solid #4f6ba8;
+  box-shadow: 0 0 0 3px rgba(79, 107, 168, 0.2);
+}
+
 #epicycle-slider::-moz-range-track {
   height: 8px;
   border-radius: 999px;
   background: linear-gradient(90deg, #6f7f5a 0%, #d8c9a8 45%, #9a2d5f 100%);
+  border: 1px solid #464646;
+}
+
+#zoom-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5b6fb3 0%, #88c3d6 50%, #d4d9ef 100%);
   border: 1px solid #464646;
 }
 
@@ -105,6 +160,15 @@ canvas {
   box-shadow: 0 0 0 3px rgba(127, 74, 143, 0.2);
 }
 
+#zoom-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f5f1e8;
+  border: 2px solid #4f6ba8;
+  box-shadow: 0 0 0 3px rgba(79, 107, 168, 0.2);
+}
+
 #epicycle-slider-value {
   color: #f7f1e6;
   background: rgba(30, 18, 36, 0.82);
@@ -114,5 +178,17 @@ canvas {
   font-family: sans-serif;
   font-size: 12px;
   min-width: 44px;
+  text-align: center;
+}
+
+#zoom-slider-value {
+  color: #e8efff;
+  background: rgba(18, 24, 44, 0.82);
+  border: 1px solid #4b5f86;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: sans-serif;
+  font-size: 12px;
+  min-width: 52px;
   text-align: center;
 }
