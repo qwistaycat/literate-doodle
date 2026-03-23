@@ -82,18 +82,6 @@ function rebuildStaticPath() {
   }
 }
 
-function loadSelectedDrawing() {
-  loading = true;
-  loadError = "";
-
-  if (drawingChoice === "outputfile") {
-    loadSVGToDrawing(processPoints);
-    return;
-  }
-
-  loadNamedDrawing(drawingChoice, processPoints);
-}
-
 function setup() {
   createCanvas(800, 600);
   noLoop();
@@ -123,6 +111,18 @@ function setup() {
   });
 }
 
+function loadSelectedDrawing() {
+  loading = true;
+  loadError = "";
+
+  if (drawingChoice === "outputfile") {
+    loadSVGToDrawing(processPoints);
+    return;
+  }
+
+  loadNamedDrawing(drawingChoice, processPoints);
+}
+
 function draw() {
   background(0);
 
@@ -131,7 +131,7 @@ function draw() {
     noStroke();
     textAlign(CENTER, CENTER);
     textSize(18);
-    text("Loading SVG...", width / 2, height / 2);
+    text("Loading SVGs...", width / 2, height / 2);
     return;
   }
 
@@ -150,7 +150,7 @@ function draw() {
     var b = reconstructedPath[(i + 1) % reconstructedPath.length];
     var isBridge = a.bridge || b.bridge;
     if (isBridge) {
-      stroke(170, 200, 255, 40);
+      stroke(170, 200, 255, 32);
       strokeWeight(1);
     } else {
       stroke(220, 130, 190, 220);
@@ -162,6 +162,7 @@ function draw() {
   var used = Math.max(1, Math.min(maxEpicycles, fourierX.length));
   noStroke();
   fill(0, 170);
+  rectMode(CORNER);
   rect(width - 250, 10, 240, 30, 6);
   fill(255);
   textAlign(RIGHT, CENTER);

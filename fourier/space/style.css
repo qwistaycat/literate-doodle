@@ -81,8 +81,8 @@ canvas {
 }
 
 #epicycle-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #f5f1e8;
   border: 2px solid #7f4a8f;
