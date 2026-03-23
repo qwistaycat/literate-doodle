@@ -5,6 +5,8 @@ var loading = true;
 var loadError = "";
 var reconstructedPath = [];
 var bridgeFlags = [];
+var showEpicycles = true;
+var epicycleTime = 0;
 
 function processPoints(points) {
   if (!points || points.length === 0) {
@@ -84,7 +86,6 @@ function rebuildStaticPath() {
 
 function setup() {
   createCanvas(800, 600);
-  noLoop();
 
   var select = document.getElementById("drawing-select");
   if (select) {
@@ -106,6 +107,14 @@ function setup() {
     });
   }
 
+  var epicycleToggle = document.getElementById("toggle-epicycles");
+  if (epicycleToggle) {
+    epicycleToggle.addEventListener("click", function () {
+      showEpicycles = !showEpicycles;
+      epicycleToggle.textContent = showEpicycles ? "Hide epicycles" : "Show epicycles";
+    });
+  }
+
   ensureNamedDrawingsLoaded(function () {
     loadSelectedDrawing();
   });
@@ -114,6 +123,7 @@ function setup() {
 function loadSelectedDrawing() {
   loading = true;
   loadError = "";
+  epicycleTime = 0;
 
   if (drawingChoice === "outputfile") {
     loadSVGToDrawing(processPoints);
@@ -121,6 +131,39 @@ function loadSelectedDrawing() {
   }
 
   loadNamedDrawing(drawingChoice, processPoints);
+}
+
+function drawEpicycleOverlay() {
+  if (!showEpicycles || !fourierX || fourierX.length === 0) return;
+
+  var activeCount = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  var ex = width / 2;
+  var ey = height / 2;
+
+  for (var i = 0; i < activeCount; i++) {
+    var prevx = ex;
+    var prevy = ey;
+    var term = fourierX[i];
+    ex += term.amp * cos(term.freq * epicycleTime + term.phase);
+    ey += term.amp * sin(term.freq * epicycleTime + term.phase);
+
+    var displayRadius = term.amp < 1.25 ? 1.25 : term.amp;
+    var circleAlpha = term.amp < 2 ? 210 : (term.amp < 6 ? 150 : 90);
+    var circleWeight = term.amp < 2 ? 1.6 : (term.amp < 6 ? 1.2 : 1.0);
+
+    stroke(255, circleAlpha);
+    strokeWeight(circleWeight);
+    noFill();
+    ellipse(prevx, prevy, displayRadius * 2);
+
+    stroke(255, 170);
+    strokeWeight(1);
+    line(prevx, prevy, ex, ey);
+  }
+
+  fill(255, 230);
+  noStroke();
+  circle(ex, ey, 4);
 }
 
 function draw() {
@@ -159,6 +202,8 @@ function draw() {
     line(a.x, a.y, b.x, b.y);
   }
 
+  drawEpicycleOverlay();
+
   var used = Math.max(1, Math.min(maxEpicycles, fourierX.length));
   noStroke();
   fill(0, 170);
@@ -168,4 +213,10 @@ function draw() {
   textAlign(RIGHT, CENTER);
   textSize(14);
   text("Epicycles: " + used + " / " + fourierX.length, width - 18, 25);
+
+  var dt = TWO_PI / Math.max(1, fourierX.length);
+  epicycleTime += dt;
+  if (epicycleTime > TWO_PI) {
+    epicycleTime = 0;
+  }
 }
