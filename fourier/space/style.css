@@ -181,6 +181,17 @@ canvas {
   text-align: center;
 }
 
+#epicycle-slider-value::-webkit-outer-spin-button,
+#epicycle-slider-value::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+#epicycle-slider-value:focus {
+  outline: none;
+  border-color: #9b78c2;
+  box-shadow: 0 0 0 3px rgba(123, 86, 163, 0.22);
+}
+
 #zoom-slider-value {
   color: #e8efff;
   background: rgba(18, 24, 44, 0.82);

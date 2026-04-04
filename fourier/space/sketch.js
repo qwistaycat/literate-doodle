@@ -63,8 +63,9 @@ function processPoints(points) {
   if (slider) {
     slider.max = String(fourierX.length);
     slider.value = String(fourierX.length);
+    if (sliderValue) sliderValue.max = String(fourierX.length);
     maxEpicycles = fourierX.length;
-    if (sliderValue) sliderValue.textContent = String(maxEpicycles);
+    if (sliderValue) sliderValue.value = String(maxEpicycles);
   }
 
   loadError = "";
@@ -203,6 +204,21 @@ function resetPlayInteraction() {
 function setup() {
   createCanvas(800, 600);
 
+  function applyEpicycleCountFromInput(rawValue) {
+    var slider = document.getElementById("epicycle-slider");
+    var sliderValue = document.getElementById("epicycle-slider-value");
+    var maxAllowed = fourierX && fourierX.length > 0 ? fourierX.length : parseInt((slider && slider.max) || "1", 10) || 1;
+    var parsed = parseInt(rawValue, 10);
+    if (!isFinite(parsed)) parsed = maxEpicycles || 1;
+    var clamped = Math.max(1, Math.min(maxAllowed, parsed));
+
+    maxEpicycles = clamped;
+    if (slider) slider.value = String(clamped);
+    if (sliderValue) sliderValue.value = String(clamped);
+    rebuildStaticPath();
+    redraw();
+  }
+
   var select = document.getElementById("drawing-select");
   if (select) {
     drawingChoice = select.value;
@@ -216,10 +232,19 @@ function setup() {
   var sliderValue = document.getElementById("epicycle-slider-value");
   if (slider) {
     slider.addEventListener("input", function (e) {
-      maxEpicycles = Math.max(1, parseInt(e.target.value, 10) || 1);
-      if (sliderValue) sliderValue.textContent = String(maxEpicycles);
-      rebuildStaticPath();
-      redraw();
+      applyEpicycleCountFromInput(e.target.value);
+    });
+  }
+
+  if (sliderValue) {
+    sliderValue.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        applyEpicycleCountFromInput(sliderValue.value);
+        sliderValue.blur();
+      }
+    });
+    sliderValue.addEventListener("blur", function () {
+      applyEpicycleCountFromInput(sliderValue.value);
     });
   }
 
