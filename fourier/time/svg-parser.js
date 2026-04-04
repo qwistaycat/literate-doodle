@@ -169,6 +169,21 @@ function fetchFirstAvailableSVG(paths, callback, index) {
 }
 
 var namedDrawingsLoadState = null;
+var extraNamedDrawingCache = {
+  kris: null,
+  laoganma: null,
+  loopy: null
+};
+
+function getNamedDrawingPaths(selection) {
+  if (selection === "heated") return ["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg", "../../images/4.vpype/heatedvpype.svg", "/images/4.vpype/heatedvpype.svg"];
+  if (selection === "pom") return ["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg", "../../images/4.vpype/pomvpype.svg", "/images/4.vpype/pomvpype.svg"];
+  if (selection === "blackberry") return ["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg", "../../images/4.vpype/blackberryvpype.svg", "/images/4.vpype/blackberryvpype.svg"];
+  if (selection === "kris") return ["../krisvpype.svg", "krisvpype.svg", "../images/4.vpype/krisvpype.svg", "../../images/4.vpype/krisvpype.svg", "/images/4.vpype/krisvpype.svg"];
+  if (selection === "laoganma") return ["../laoganmavpype.svg", "laoganmavpype.svg", "../images/4.vpype/laoganmavpype.svg", "../../images/4.vpype/laoganmavpype.svg", "/images/4.vpype/laoganmavpype.svg"];
+  if (selection === "loopy") return ["../loopyvpype.svg", "loopyvpype.svg", "../images/4.vpype/loopyvpype.svg", "../../images/4.vpype/loopyvpype.svg", "/images/4.vpype/loopyvpype.svg"];
+  return null;
+}
 
 function getDefaultLoadState() {
   return {
@@ -237,12 +252,29 @@ function ensureNamedDrawingsLoaded(done) {
 }
 
 function loadNamedDrawing(selection, callback) {
+  var candidatePaths = getNamedDrawingPaths(selection);
+
+  if (selection === "kris" || selection === "laoganma" || selection === "loopy") {
+    if (extraNamedDrawingCache[selection] && extraNamedDrawingCache[selection].length > 0) {
+      callback(extraNamedDrawingCache[selection]);
+      return;
+    }
+
+    fetchFirstAvailableSVG(candidatePaths, function (err, points) {
+      if (!err && points.length > 0) {
+        extraNamedDrawingCache[selection] = points;
+      }
+      callback(points);
+    });
+    return;
+  }
+
   if (selection === "heated") {
     if (typeof drawingHeated !== "undefined" && drawingHeated.length > 0) {
       callback(drawingHeated);
       return;
     }
-    fetchFirstAvailableSVG(["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(candidatePaths || ["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
         drawingHeated = points;
       }
@@ -256,7 +288,7 @@ function loadNamedDrawing(selection, callback) {
       callback(drawingPom);
       return;
     }
-    fetchFirstAvailableSVG(["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(candidatePaths || ["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingPom !== "undefined") {
         drawingPom = points;
       }
@@ -270,7 +302,7 @@ function loadNamedDrawing(selection, callback) {
       callback(drawingBlackberry);
       return;
     }
-    fetchFirstAvailableSVG(["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"], function (err, points) {
+    fetchFirstAvailableSVG(candidatePaths || ["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"], function (err, points) {
       if (!err && points.length > 0 && typeof drawingBlackberry !== "undefined") {
         drawingBlackberry = points;
       }

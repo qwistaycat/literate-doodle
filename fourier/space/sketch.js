@@ -1,5 +1,5 @@
 var fourierX = [];
-var drawingChoice = "outputfile";
+var drawingChoice = "laoganma";
 var maxEpicycles = 1;
 var loading = true;
 var loadError = "";
@@ -7,18 +7,21 @@ var reconstructedPath = [];
 var bridgeFlags = [];
 var showEpicycles = true;
 var epicycleTime = 0;
-var playAmpNudge = 0;
-var playPhaseNudge = 0;
-var playDirty = false;
-var isDraggingPlay = false;
-var lastDragX = 0;
-var lastDragY = 0;
 var viewZoom = 1;
 var ringSnapshots = [];
 var hoveredRingIndex = -1;
 var selectedRingIndex = -1;
+var globalAmpNudge = 0;
 var termAmpOffsets = [];
-var termPhaseOffsets = [];
+var isDraggingAmplitude = false;
+var lastDragY = 0;
+var drawingDataCache = {};
+var DRAWING_CACHE_PREFIX = "spaceDrawingCache_v1_";
+var SPLIT_RATIO_STORAGE_KEY = "spacePaneSplitRatio_v1";
+var paneTop = 56;
+var panePadding = 10;
+var leftPaneRatio = 0.58;
+var isDraggingDivider = false;
 
 function processPoints(points) {
   if (!points || points.length === 0) {
@@ -27,6 +30,13 @@ function processPoints(points) {
     redraw();
     return;
   }
+
+  var data = buildDrawingDataFromPoints(points);
+  applyDrawingData(data);
+}
+
+function buildDrawingDataFromPoints(points) {
+  if (!points || points.length === 0) return null;
 
   var cx = 0;
   var cy = 0;
@@ -45,24 +55,56 @@ function processPoints(points) {
   var scale = maxDist > 0 ? 250 / maxDist : 1;
 
   var x = [];
-  bridgeFlags = [];
+  var localBridgeFlags = [];
   for (var i = 0; i < points.length; i++) {
     x.push(new Complex((points[i].x - cx) * scale, (points[i].y - cy) * scale));
-    bridgeFlags.push(!!points[i].bridge);
+    localBridgeFlags.push(!!points[i].bridge);
   }
 
-  fourierX = dft(x);
-  fourierX.sort(function (a, b) { return b.amp - a.amp; });
+  var localFourierX = dft(x);
+  localFourierX.sort(function (a, b) { return b.amp - a.amp; });
+
+  return {
+    fourierX: localFourierX.map(function (term) {
+      return {
+        freq: term.freq,
+        amp: term.amp,
+        phase: term.phase
+      };
+    }),
+    bridgeFlags: localBridgeFlags
+  };
+}
+
+function applyDrawingData(data) {
+  if (!data || !data.fourierX || data.fourierX.length === 0) {
+    loadError = "Could not load any SVG points.";
+    loading = false;
+    redraw();
+    return;
+  }
+
+  fourierX = data.fourierX.map(function (term) {
+    return {
+      freq: term.freq,
+      amp: term.amp,
+      phase: term.phase
+    };
+  });
+  bridgeFlags = (data.bridgeFlags || []).slice();
+
   termAmpOffsets = new Array(fourierX.length).fill(0);
-  termPhaseOffsets = new Array(fourierX.length).fill(0);
+  globalAmpNudge = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
 
   var slider = document.getElementById("epicycle-slider");
   var sliderValue = document.getElementById("epicycle-slider-value");
   if (slider) {
-    slider.max = String(fourierX.length);
-    slider.value = String(fourierX.length);
+    slider.min = "0";
+    slider.max = "1000";
+    slider.step = "1";
+    slider.value = String(countToSliderValue(fourierX.length, fourierX.length));
     if (sliderValue) sliderValue.max = String(fourierX.length);
     maxEpicycles = fourierX.length;
     if (sliderValue) sliderValue.value = String(maxEpicycles);
@@ -72,6 +114,35 @@ function processPoints(points) {
   loading = false;
   rebuildStaticPath();
   redraw();
+}
+
+function getDrawingCacheKey(selection) {
+  return DRAWING_CACHE_PREFIX + selection;
+}
+
+function loadDrawingDataFromStorage(selection) {
+  try {
+    var raw = localStorage.getItem(getDrawingCacheKey(selection));
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.fourierX) || parsed.fourierX.length === 0) return null;
+    return {
+      fourierX: parsed.fourierX,
+      bridgeFlags: Array.isArray(parsed.bridgeFlags) ? parsed.bridgeFlags : []
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveDrawingDataToStorage(selection, data) {
+  try {
+    localStorage.setItem(getDrawingCacheKey(selection), JSON.stringify({
+      fourierX: data.fourierX,
+      bridgeFlags: data.bridgeFlags
+    }));
+  } catch (e) {
+  }
 }
 
 function rebuildStaticPath() {
@@ -104,35 +175,185 @@ function rebuildStaticPath() {
 function getPlayTerm(term, index, activeCount) {
   var norm = activeCount > 1 ? index / (activeCount - 1) : 0;
   var highFreqWeight = Math.pow(norm, 0.8);
-  var lowFreqWeight = 1 - highFreqWeight;
-
-  var ampScale = 1 + playAmpNudge * (0.2 + 0.8 * highFreqWeight);
-  if (ampScale < 0.25) ampScale = 0.25;
-  if (ampScale > 1.75) ampScale = 1.75;
-
-  var phaseShift = playPhaseNudge * (0.15 + 0.85 * lowFreqWeight);
-  var termAmpOffset = termAmpOffsets[index] || 0;
-  var termPhaseOffset = termPhaseOffsets[index] || 0;
+  var ampScale = 1 + globalAmpNudge * (0.2 + 0.8 * highFreqWeight);
+  ampScale = clamp(ampScale, 0.25, 1.85);
+  var termAmpScale = 1 + (termAmpOffsets[index] || 0);
+  termAmpScale = clamp(termAmpScale, 0.2, 2.0);
 
   return {
-    amp: term.amp * ampScale * (1 + termAmpOffset),
-    phase: term.phase + phaseShift + termPhaseOffset,
+    amp: term.amp * ampScale * termAmpScale,
+    phase: term.phase,
     freq: term.freq
   };
 }
 
-function worldToScreen(wx, wy) {
+function getPaneLayout() {
+  var x = panePadding;
+  var y = paneTop;
+  var w = width - panePadding * 2;
+  var h = height - paneTop - panePadding;
+  var gap = 10;
+  var minPaneW = 220;
+  var unclampedLeftW = Math.floor(w * leftPaneRatio);
+  var leftW = Math.max(minPaneW, Math.min(w - gap - minPaneW, unclampedLeftW));
+  var rightW = w - leftW - gap;
+
   return {
-    x: width / 2 + wx * viewZoom,
-    y: height / 2 + wy * viewZoom
+    left: {
+      x: x,
+      y: y,
+      w: leftW,
+      h: h,
+      cx: x + leftW / 2,
+      cy: y + h / 2
+    },
+    right: {
+      x: x + leftW + gap,
+      y: y,
+      w: rightW,
+      h: h
+    }
+  };
+}
+
+function inLeftPane(sx, sy) {
+  var layout = getPaneLayout();
+  return sx >= layout.left.x && sx <= layout.left.x + layout.left.w && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
+}
+
+function dividerXFromLayout(layout) {
+  return layout.left.x + layout.left.w + 5;
+}
+
+function isNearDivider(sx, sy) {
+  var layout = getPaneLayout();
+  var dividerX = dividerXFromLayout(layout);
+  return Math.abs(sx - dividerX) <= 10 && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
+}
+
+function updatePaneRatioFromMouse(mouseXPos) {
+  var layout = getPaneLayout();
+  var totalW = width - panePadding * 2;
+  var leftW = mouseXPos - panePadding - 5;
+  var ratio = leftW / totalW;
+  leftPaneRatio = clamp(ratio, 0.35, 0.75);
+  localStorage.setItem(SPLIT_RATIO_STORAGE_KEY, String(leftPaneRatio));
+}
+
+function clipRect(x, y, w, h) {
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.rect(x, y, w, h);
+  drawingContext.clip();
+}
+
+function unclipRect() {
+  drawingContext.restore();
+}
+
+function worldToScreen(wx, wy) {
+  var layout = getPaneLayout();
+  return {
+    x: layout.left.cx + wx * viewZoom,
+    y: layout.left.cy + wy * viewZoom
   };
 }
 
 function screenToWorld(sx, sy) {
+  var layout = getPaneLayout();
   return {
-    x: (sx - width / 2) / viewZoom,
-    y: (sy - height / 2) / viewZoom
+    x: (sx - layout.left.cx) / viewZoom,
+    y: (sy - layout.left.cy) / viewZoom
   };
+}
+
+function drawPaneFrames() {
+  var layout = getPaneLayout();
+  var dividerX = dividerXFromLayout(layout);
+
+  noStroke();
+  fill(8, 10, 15, 220);
+  rect(layout.left.x, layout.left.y, layout.left.w, layout.left.h, 8);
+  fill(12, 14, 22, 230);
+  rect(layout.right.x, layout.right.y, layout.right.w, layout.right.h, 8);
+
+  noFill();
+  stroke(110, 120, 150, 120);
+  strokeWeight(1);
+  rect(layout.left.x, layout.left.y, layout.left.w, layout.left.h, 8);
+  rect(layout.right.x, layout.right.y, layout.right.w, layout.right.h, 8);
+
+  stroke(isDraggingDivider || isNearDivider(mouseX, mouseY) ? color(245, 225, 160, 220) : color(140, 145, 165, 170));
+  strokeWeight(isDraggingDivider ? 4 : 2);
+  line(dividerX, layout.left.y + 6, dividerX, layout.left.y + layout.left.h - 6);
+
+  noStroke();
+  fill(190, 200, 230, 170);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  text("Epicycles", layout.left.x + 10, layout.left.y + 8);
+  text("Sine Waves (per epicycle)", layout.right.x + 10, layout.right.y + 8);
+}
+
+function drawSinePanel() {
+  if (!fourierX || fourierX.length === 0) return;
+
+  var layout = getPaneLayout();
+  var panel = layout.right;
+  var activeCount = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  var terms = [];
+  var maxAmp = 1;
+
+  for (var i = 0; i < activeCount; i++) {
+    var t = getPlayTerm(fourierX[i], i, activeCount);
+    terms.push(t);
+    if (Math.abs(t.amp) > maxAmp) maxAmp = Math.abs(t.amp);
+  }
+
+  var plotX = panel.x + 10;
+  var plotY = panel.y + 28;
+  var plotW = panel.w - 20;
+  var plotH = panel.h - 40;
+  var yMid = plotY + plotH / 2;
+  var samples = 170;
+
+  stroke(140, 150, 180, 70);
+  strokeWeight(1);
+  line(plotX, yMid, plotX + plotW, yMid);
+
+  clipRect(plotX, plotY, plotW, plotH);
+  for (var k = 0; k < terms.length; k++) {
+    var term = terms[k];
+    var hue = (k * 27) % 360;
+    colorMode(HSB, 360, 100, 100, 255);
+    var alpha = clamp(220 - activeCount * 1.8, 22, 160);
+    if (k === selectedRingIndex) alpha = 230;
+    stroke(hue, 70, 100, alpha);
+    colorMode(RGB, 255, 255, 255, 255);
+    strokeWeight(k === selectedRingIndex ? 1.9 : 1);
+    noFill();
+    beginShape();
+    for (var s = 0; s <= samples; s++) {
+      var u = s / samples;
+      var x = plotX + u * plotW;
+      var theta = u * TWO_PI;
+      var ampPx = (Math.abs(term.amp) / maxAmp) * (plotH * 0.44);
+      var y = yMid + ampPx * sin(term.freq * theta + term.phase + epicycleTime);
+      vertex(x, y);
+    }
+    endShape();
+  }
+  unclipRect();
+
+  fill(205, 215, 240, 190);
+  noStroke();
+  textSize(11);
+  if (selectedRingIndex >= 0 && selectedRingIndex < terms.length) {
+    var st = terms[selectedRingIndex];
+    text("selected: amp " + nf(st.amp, 1, 2) + " • freq " + nf(st.freq, 1, 2), plotX + 2, plotY + 4);
+  } else {
+    text("showing " + activeCount + " waves", plotX + 2, plotY + 4);
+  }
 }
 
 function updateHoveredRing() {
@@ -191,14 +412,26 @@ function clamp(v, minV, maxV) {
   return Math.max(minV, Math.min(maxV, v));
 }
 
+function sliderValueToCount(sliderRaw, maxAllowed) {
+  if (maxAllowed <= 1) return 1;
+  var t = clamp((parseFloat(sliderRaw) || 0) / 1000, 0, 1);
+  var count = Math.round(Math.exp(Math.log(maxAllowed) * t));
+  return Math.max(1, Math.min(maxAllowed, count));
+}
+
+function countToSliderValue(count, maxAllowed) {
+  if (maxAllowed <= 1) return 1000;
+  var clampedCount = Math.max(1, Math.min(maxAllowed, count));
+  var t = Math.log(clampedCount) / Math.log(maxAllowed);
+  return Math.round(clamp(t, 0, 1) * 1000);
+}
+
 function resetPlayInteraction() {
-  playAmpNudge = 0;
-  playPhaseNudge = 0;
+  globalAmpNudge = 0;
   for (var i = 0; i < termAmpOffsets.length; i++) termAmpOffsets[i] = 0;
-  for (var j = 0; j < termPhaseOffsets.length; j++) termPhaseOffsets[j] = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
-  playDirty = true;
+  rebuildStaticPath();
 }
 
 function setup() {
@@ -207,14 +440,27 @@ function setup() {
   function applyEpicycleCountFromInput(rawValue) {
     var slider = document.getElementById("epicycle-slider");
     var sliderValue = document.getElementById("epicycle-slider-value");
-    var maxAllowed = fourierX && fourierX.length > 0 ? fourierX.length : parseInt((slider && slider.max) || "1", 10) || 1;
+    var maxAllowed = fourierX && fourierX.length > 0 ? fourierX.length : parseInt((sliderValue && sliderValue.max) || "1", 10) || 1;
     var parsed = parseInt(rawValue, 10);
     if (!isFinite(parsed)) parsed = maxEpicycles || 1;
     var clamped = Math.max(1, Math.min(maxAllowed, parsed));
 
     maxEpicycles = clamped;
-    if (slider) slider.value = String(clamped);
+    if (slider) slider.value = String(countToSliderValue(clamped, maxAllowed));
     if (sliderValue) sliderValue.value = String(clamped);
+    rebuildStaticPath();
+    redraw();
+  }
+
+  function applyEpicycleCountFromSlider(rawSliderValue) {
+    var slider = document.getElementById("epicycle-slider");
+    var sliderValue = document.getElementById("epicycle-slider-value");
+    var maxAllowed = fourierX && fourierX.length > 0 ? fourierX.length : parseInt((sliderValue && sliderValue.max) || "1", 10) || 1;
+    var count = sliderValueToCount(rawSliderValue, maxAllowed);
+
+    maxEpicycles = count;
+    if (slider) slider.value = String(countToSliderValue(count, maxAllowed));
+    if (sliderValue) sliderValue.value = String(count);
     rebuildStaticPath();
     redraw();
   }
@@ -232,7 +478,7 @@ function setup() {
   var sliderValue = document.getElementById("epicycle-slider-value");
   if (slider) {
     slider.addEventListener("input", function (e) {
-      applyEpicycleCountFromInput(e.target.value);
+      applyEpicycleCountFromSlider(e.target.value);
     });
   }
 
@@ -261,8 +507,14 @@ function setup() {
     if (zoomValue) zoomValue.textContent = viewZoom.toFixed(2) + "x";
   }
 
+  var storedSplit = parseFloat(localStorage.getItem(SPLIT_RATIO_STORAGE_KEY));
+  if (isFinite(storedSplit)) {
+    leftPaneRatio = clamp(storedSplit, 0.35, 0.75);
+  }
+
   var epicycleToggle = document.getElementById("toggle-epicycles");
   if (epicycleToggle) {
+    epicycleToggle.textContent = showEpicycles ? "Hide epicycles" : "Show epicycles";
     epicycleToggle.addEventListener("click", function () {
       showEpicycles = !showEpicycles;
       epicycleToggle.textContent = showEpicycles ? "Hide epicycles" : "Show epicycles";
@@ -276,9 +528,7 @@ function setup() {
     });
   }
 
-  ensureNamedDrawingsLoaded(function () {
-    loadSelectedDrawing();
-  });
+  loadSelectedDrawing();
 }
 
 function loadSelectedDrawing() {
@@ -287,12 +537,34 @@ function loadSelectedDrawing() {
   epicycleTime = 0;
   resetPlayInteraction();
 
-  if (drawingChoice === "outputfile") {
-    loadSVGToDrawing(processPoints);
+  var cachedData = drawingDataCache[drawingChoice] || loadDrawingDataFromStorage(drawingChoice);
+  if (cachedData && cachedData.fourierX && cachedData.fourierX.length > 0) {
+    drawingDataCache[drawingChoice] = cachedData;
+    applyDrawingData(cachedData);
     return;
   }
 
-  loadNamedDrawing(drawingChoice, processPoints);
+  if (drawingChoice === "outputfile") {
+    loadSVGToDrawing(function (points) {
+      processPoints(points);
+    });
+    return;
+  }
+
+  loadNamedDrawing(drawingChoice, function (points) {
+    if (!points || points.length === 0) {
+      processPoints([]);
+      return;
+    }
+    var built = buildDrawingDataFromPoints(points);
+    if (!built) {
+      processPoints([]);
+      return;
+    }
+    drawingDataCache[drawingChoice] = built;
+    saveDrawingDataToStorage(drawingChoice, built);
+    applyDrawingData(built);
+  });
 }
 
 function buildEpicycleSegments(activeCount) {
@@ -375,9 +647,10 @@ function drawEpicycleOverlay() {
 function draw() {
   background(0);
 
-  if (playDirty) {
-    rebuildStaticPath();
-    playDirty = false;
+  if (isDraggingDivider || isNearDivider(mouseX, mouseY)) {
+    cursor("ew-resize");
+  } else {
+    cursor(ARROW);
   }
 
   if (loading) {
@@ -399,6 +672,11 @@ function draw() {
     return;
   }
 
+  drawPaneFrames();
+
+  var layout = getPaneLayout();
+  clipRect(layout.left.x, layout.left.y, layout.left.w, layout.left.h);
+
   noFill();
   for (var i = 0; i < reconstructedPath.length; i++) {
     var a = reconstructedPath[i];
@@ -417,24 +695,26 @@ function draw() {
   }
 
   drawEpicycleOverlay();
+  unclipRect();
+  drawSinePanel();
 
   var used = Math.max(1, Math.min(maxEpicycles, fourierX.length));
   noStroke();
   fill(0, 170);
   rectMode(CORNER);
-  rect(width - 250, 10, 240, 30, 6);
+  rect(layout.left.x + layout.left.w - 220, layout.left.y + 8, 210, 24, 6);
   fill(255);
   textAlign(RIGHT, CENTER);
-  textSize(14);
-  text("Epicycles: " + used + " / " + fourierX.length, width - 18, 25);
+  textSize(12);
+  text("Epicycles: " + used + " / " + fourierX.length, layout.left.x + layout.left.w - 16, layout.left.y + 20);
 
   fill(225, 200, 255, 200);
   textAlign(LEFT, CENTER);
-  textSize(12);
-  var playText = selectedRingIndex >= 0
-    ? "Selected ring " + (selectedRingIndex + 1) + ": drag ←→ phase, ↑↓ amplitude"
-    : "Drag canvas: global ←→ phase " + nf(playPhaseNudge, 1, 2) + "  ↑↓ amplitude " + nf(playAmpNudge, 1, 2);
-  text(playText, 12, height - 16);
+  textSize(11);
+  var ampText = selectedRingIndex >= 0
+    ? "Drag up/down to change selected ring amplitude"
+    : "Drag up/down to change global amplitudes";
+  text(ampText, layout.left.x + 10, layout.left.y + layout.left.h - 14);
   updateSelectedRingInfo();
 
   var dt = TWO_PI / Math.max(1, fourierX.length);
@@ -445,43 +725,51 @@ function draw() {
 }
 
 function mousePressed() {
-  if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+  if (isNearDivider(mouseX, mouseY)) {
+    isDraggingDivider = true;
+    return;
+  }
+
+  if (!inLeftPane(mouseX, mouseY)) return;
   updateHoveredRing();
   if (hoveredRingIndex >= 0) {
     selectedRingIndex = hoveredRingIndex;
   } else if (!keyIsDown(SHIFT)) {
     selectedRingIndex = -1;
   }
-  isDraggingPlay = true;
-  lastDragX = mouseX;
+  isDraggingAmplitude = true;
   lastDragY = mouseY;
+  updateSelectedRingInfo();
 }
 
 function mouseDragged() {
-  if (!isDraggingPlay) return;
+  if (isDraggingDivider) {
+    updatePaneRatioFromMouse(mouseX);
+    return;
+  }
 
-  var dx = mouseX - lastDragX;
+  if (!isDraggingAmplitude) return;
+
   var dy = mouseY - lastDragY;
-  lastDragX = mouseX;
   lastDragY = mouseY;
 
   if (selectedRingIndex >= 0 && selectedRingIndex < termAmpOffsets.length) {
-    termPhaseOffsets[selectedRingIndex] = clamp((termPhaseOffsets[selectedRingIndex] || 0) + dx * 0.004, -1.2, 1.2);
-    termAmpOffsets[selectedRingIndex] = clamp((termAmpOffsets[selectedRingIndex] || 0) - dy * 0.0035, -0.7, 0.9);
+    termAmpOffsets[selectedRingIndex] = clamp((termAmpOffsets[selectedRingIndex] || 0) - dy * 0.004, -0.8, 1.0);
   } else {
-    playPhaseNudge = clamp(playPhaseNudge + dx * 0.004, -0.9, 0.9);
-    playAmpNudge = clamp(playAmpNudge - dy * 0.0025, -0.55, 0.55);
+    globalAmpNudge = clamp(globalAmpNudge - dy * 0.003, -0.55, 0.75);
   }
-  playDirty = true;
+
+  rebuildStaticPath();
 }
 
 function mouseReleased() {
-  isDraggingPlay = false;
+  isDraggingDivider = false;
+  isDraggingAmplitude = false;
   updateSelectedRingInfo();
 }
 
 function mouseWheel(event) {
-  if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return false;
+  if (!inLeftPane(mouseX, mouseY)) return false;
   var zoomSlider = document.getElementById("zoom-slider");
   var zoomValue = document.getElementById("zoom-slider-value");
   var delta = event.delta > 0 ? -0.08 : 0.08;
