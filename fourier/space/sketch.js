@@ -13,6 +13,7 @@ var hoveredRingIndex = -1;
 var selectedRingIndex = -1;
 var globalAmpNudge = 0;
 var termAmpOffsets = [];
+var termPhaseOffsets = [];
 var isDraggingAmplitude = false;
 var lastDragY = 0;
 var drawingDataCache = {};
@@ -22,6 +23,11 @@ var paneTop = 56;
 var panePadding = 10;
 var leftPaneRatio = 0.58;
 var isDraggingDivider = false;
+var barChartItems = [];
+var hoveredBarIndex = -1;
+var isDraggingBarAmplitude = false;
+var phaseWheelGeom = null;
+var isDraggingPhaseWheel = false;
 
 function processPoints(points) {
   if (!points || points.length === 0) {
@@ -94,6 +100,7 @@ function applyDrawingData(data) {
   bridgeFlags = (data.bridgeFlags || []).slice();
 
   termAmpOffsets = new Array(fourierX.length).fill(0);
+  termPhaseOffsets = new Array(fourierX.length).fill(0);
   globalAmpNudge = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
@@ -182,9 +189,116 @@ function getPlayTerm(term, index, activeCount) {
 
   return {
     amp: term.amp * ampScale * termAmpScale,
-    phase: term.phase,
+    phase: term.phase + (termPhaseOffsets[index] || 0),
     freq: term.freq
   };
+}
+
+function normalizeAngle0ToTwoPi(angle) {
+  var a = angle % TWO_PI;
+  if (a < 0) a += TWO_PI;
+  return a;
+}
+
+function normalizeToPi(angle) {
+  var a = angle;
+  while (a > PI) a -= TWO_PI;
+  while (a < -PI) a += TWO_PI;
+  return a;
+}
+
+function getPhaseWheelGeometry(panel) {
+  return {
+    cx: panel.x + panel.w - 58,
+    cy: panel.y + 64,
+    rOuter: 34,
+    rInner: 21
+  };
+}
+
+function isInPhaseWheel(sx, sy) {
+  if (!phaseWheelGeom || selectedRingIndex < 0) return false;
+  var dx = sx - phaseWheelGeom.cx;
+  var dy = sy - phaseWheelGeom.cy;
+  var d = Math.sqrt(dx * dx + dy * dy);
+  return d <= phaseWheelGeom.rOuter + 4;
+}
+
+function applyPhaseFromMouse(sx, sy) {
+  if (selectedRingIndex < 0 || selectedRingIndex >= fourierX.length || !phaseWheelGeom) return;
+  var dx = sx - phaseWheelGeom.cx;
+  var dy = sy - phaseWheelGeom.cy;
+  var absolutePhase = normalizeAngle0ToTwoPi(Math.atan2(dy, dx));
+  termPhaseOffsets[selectedRingIndex] = normalizeToPi(absolutePhase);
+  rebuildStaticPath();
+}
+
+function drawPhaseWheel(panel) {
+  if (selectedRingIndex < 0 || selectedRingIndex >= fourierX.length) {
+    phaseWheelGeom = null;
+    return;
+  }
+
+  phaseWheelGeom = getPhaseWheelGeometry(panel);
+
+  push();
+  noFill();
+  strokeWeight(6);
+  colorMode(HSB, 360, 100, 100, 255);
+  for (var deg = 0; deg < 360; deg += 2) {
+    stroke(deg, 90, 100, 230);
+    arc(phaseWheelGeom.cx, phaseWheelGeom.cy, phaseWheelGeom.rOuter * 2, phaseWheelGeom.rOuter * 2, radians(deg), radians(deg + 2));
+  }
+  pop();
+
+  fill(18, 22, 33, 245);
+  noStroke();
+  circle(phaseWheelGeom.cx, phaseWheelGeom.cy, phaseWheelGeom.rInner * 2);
+
+  var shiftPhase = normalizeAngle0ToTwoPi(termPhaseOffsets[selectedRingIndex] || 0);
+  var px = phaseWheelGeom.cx + Math.cos(shiftPhase) * (phaseWheelGeom.rOuter - 2);
+  var py = phaseWheelGeom.cy + Math.sin(shiftPhase) * (phaseWheelGeom.rOuter - 2);
+
+  stroke(255, 245, 220, 245);
+  strokeWeight(1.8);
+  line(phaseWheelGeom.cx, phaseWheelGeom.cy, px, py);
+  noStroke();
+  fill(255, 245, 220, 250);
+  circle(px, py, 8);
+
+  fill(212, 220, 245, 200);
+  textSize(9);
+  textAlign(CENTER, TOP);
+  text("phase 0 → 2π", phaseWheelGeom.cx, phaseWheelGeom.cy + phaseWheelGeom.rOuter + 4);
+
+  var tickSpecs = [
+    { angle: 0, label: "0" },
+    { angle: HALF_PI, label: "π/2" },
+    { angle: PI, label: "π" },
+    { angle: 3 * PI / 2, label: "3π/2" }
+  ];
+
+  stroke(238, 236, 228, 230);
+  strokeWeight(1.3);
+  fill(230, 230, 230, 220);
+  textSize(8);
+  textAlign(CENTER, CENTER);
+  for (var t = 0; t < tickSpecs.length; t++) {
+    var tick = tickSpecs[t];
+    var ax = Math.cos(tick.angle);
+    var ay = Math.sin(tick.angle);
+    var tx1 = phaseWheelGeom.cx + ax * (phaseWheelGeom.rOuter + 1);
+    var ty1 = phaseWheelGeom.cy + ay * (phaseWheelGeom.rOuter + 1);
+    var tx2 = phaseWheelGeom.cx + ax * (phaseWheelGeom.rOuter + 7);
+    var ty2 = phaseWheelGeom.cy + ay * (phaseWheelGeom.rOuter + 7);
+    line(tx1, ty1, tx2, ty2);
+    var lx = phaseWheelGeom.cx + ax * (phaseWheelGeom.rOuter + 16);
+    var ly = phaseWheelGeom.cy + ay * (phaseWheelGeom.rOuter + 16);
+    noStroke();
+    fill(230, 230, 230, 220);
+    text(tick.label, lx, ly);
+    stroke(238, 236, 228, 230);
+  }
 }
 
 function getPaneLayout() {
@@ -219,6 +333,17 @@ function getPaneLayout() {
 function inLeftPane(sx, sy) {
   var layout = getPaneLayout();
   return sx >= layout.left.x && sx <= layout.left.x + layout.left.w && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
+}
+
+function findBarAt(sx, sy) {
+  if (!barChartItems || barChartItems.length === 0) return -1;
+  for (var i = 0; i < barChartItems.length; i++) {
+    var bar = barChartItems[i];
+    if (sx >= bar.x && sx <= bar.x + bar.w && sy >= bar.y && sy <= bar.y + bar.h) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function dividerXFromLayout(layout) {
@@ -292,7 +417,7 @@ function drawPaneFrames() {
   textAlign(LEFT, TOP);
   textSize(12);
   text("Epicycles", layout.left.x + 10, layout.left.y + 8);
-  text("Sine Waves (per epicycle)", layout.right.x + 10, layout.right.y + 8);
+  text("Sine + Freq×Amp", layout.right.x + 10, layout.right.y + 8);
 }
 
 function drawSinePanel() {
@@ -310,11 +435,19 @@ function drawSinePanel() {
     if (Math.abs(t.amp) > maxAmp) maxAmp = Math.abs(t.amp);
   }
 
-  var plotX = panel.x + 10;
-  var plotY = panel.y + 28;
-  var plotW = panel.w - 20;
-  var plotH = panel.h - 40;
+  var panelPad = 10;
+  var headerY = panel.y + 28;
+  var plotX = panel.x + panelPad;
+  var plotW = panel.w - panelPad * 2;
+  var sineH = Math.max(120, Math.floor(panel.h * 0.56));
+  var plotY = headerY;
+  var plotH = Math.min(sineH, panel.h - 86);
   var yMid = plotY + plotH / 2;
+  var barGap = 12;
+  var barX = plotX;
+  var barY = plotY + plotH + barGap;
+  var barW = plotW;
+  var barH = panel.y + panel.h - barY - 10;
   var samples = 170;
 
   stroke(140, 150, 180, 70);
@@ -324,11 +457,11 @@ function drawSinePanel() {
   clipRect(plotX, plotY, plotW, plotH);
   for (var k = 0; k < terms.length; k++) {
     var term = terms[k];
-    var hue = (k * 27) % 360;
-    colorMode(HSB, 360, 100, 100, 255);
+    var phaseHue = normalizeAngle0ToTwoPi(termPhaseOffsets[k] || 0) * 180 / PI;
     var alpha = clamp(220 - activeCount * 1.8, 22, 160);
     if (k === selectedRingIndex) alpha = 230;
-    stroke(hue, 70, 100, alpha);
+    colorMode(HSB, 360, 100, 100, 255);
+    stroke(phaseHue, 82, 100, alpha);
     colorMode(RGB, 255, 255, 255, 255);
     strokeWeight(k === selectedRingIndex ? 1.9 : 1);
     noFill();
@@ -345,6 +478,70 @@ function drawSinePanel() {
   }
   unclipRect();
 
+  var maxFreq = 1;
+  for (var f = 0; f < terms.length; f++) {
+    maxFreq = Math.max(maxFreq, Math.abs(terms[f].freq));
+  }
+  var baseY = barY + barH - 18;
+  var barTopLimit = barY + 10;
+  var barBottomLimit = barY + barH - 10;
+  var barSlot = terms.length > 0 ? barW / terms.length : barW;
+  barChartItems = [];
+
+  fill(18, 24, 35, 170);
+  noStroke();
+  rect(barX, barY, barW, barH, 6);
+  stroke(128, 138, 170, 80);
+  strokeWeight(1);
+  line(barX + 2, barTopLimit, barX + 2, baseY);
+  line(barX, baseY, barX + barW, baseY);
+
+  for (var b = 0; b < terms.length; b++) {
+    var bt = terms[b];
+    var absAmp = Math.abs(bt.amp);
+    var normH = (absAmp / maxAmp) * (baseY - barTopLimit);
+    var barHeight = Math.max(2, normH);
+    var bx = barX + b * barSlot + Math.max(1, barSlot * 0.08);
+    var bw = Math.max(3, barSlot * 0.84);
+    var by = baseY - barHeight;
+    var barAlpha = b === selectedRingIndex ? 245 : 185;
+    var barHue = normalizeAngle0ToTwoPi(termPhaseOffsets[b] || 0) * 180 / PI;
+    colorMode(HSB, 360, 100, 100, 255);
+    fill(barHue, 76, b === selectedRingIndex ? 98 : 88, barAlpha);
+    colorMode(RGB, 255, 255, 255, 255);
+    noStroke();
+    rect(bx, by, bw, barHeight, 3);
+
+    barChartItems.push({
+      x: bx,
+      y: by,
+      w: bw,
+      h: Math.max(4, baseY - by),
+      termIndex: b,
+      freq: bt.freq,
+      amp: bt.amp
+    });
+  }
+
+  hoveredBarIndex = findBarAt(mouseX, mouseY);
+  if (hoveredBarIndex >= 0 && hoveredBarIndex < barChartItems.length) {
+    var hb = barChartItems[hoveredBarIndex];
+    noFill();
+    stroke(255, 235, 170, 230);
+    strokeWeight(2);
+    rect(hb.x - 1, hb.y - 1, hb.w + 2, hb.h + 2, 3);
+  }
+
+  fill(205, 215, 240, 150);
+  noStroke();
+  textSize(10);
+  text("frequency × amplitude", barX + 2, barY + 2);
+  textAlign(LEFT, TOP);
+  text("Amplitude", barX + 6, barTopLimit + 2);
+  textAlign(CENTER, TOP);
+  text("Frequency", barX + barW * 0.5, baseY + 6);
+  textAlign(LEFT, TOP);
+
   fill(205, 215, 240, 190);
   noStroke();
   textSize(11);
@@ -354,6 +551,8 @@ function drawSinePanel() {
   } else {
     text("showing " + activeCount + " waves", plotX + 2, plotY + 4);
   }
+
+  drawPhaseWheel(panel);
 }
 
 function updateHoveredRing() {
@@ -429,8 +628,11 @@ function countToSliderValue(count, maxAllowed) {
 function resetPlayInteraction() {
   globalAmpNudge = 0;
   for (var i = 0; i < termAmpOffsets.length; i++) termAmpOffsets[i] = 0;
+  for (var j = 0; j < termPhaseOffsets.length; j++) termPhaseOffsets[j] = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
+  phaseWheelGeom = null;
+  isDraggingPhaseWheel = false;
   rebuildStaticPath();
 }
 
@@ -636,6 +838,10 @@ function draw() {
 
   if (isDraggingDivider || isNearDivider(mouseX, mouseY)) {
     cursor("ew-resize");
+  } else if (isDraggingPhaseWheel || isInPhaseWheel(mouseX, mouseY)) {
+    cursor(HAND);
+  } else if (isDraggingBarAmplitude || hoveredBarIndex >= 0) {
+    cursor("ns-resize");
   } else {
     cursor(ARROW);
   }
@@ -717,6 +923,20 @@ function mousePressed() {
     return;
   }
 
+  if (isInPhaseWheel(mouseX, mouseY)) {
+    isDraggingPhaseWheel = true;
+    applyPhaseFromMouse(mouseX, mouseY);
+    return;
+  }
+
+  if (hoveredBarIndex >= 0 && hoveredBarIndex < barChartItems.length) {
+    selectedRingIndex = barChartItems[hoveredBarIndex].termIndex;
+    isDraggingBarAmplitude = true;
+    lastDragY = mouseY;
+    updateSelectedRingInfo();
+    return;
+  }
+
   if (!inLeftPane(mouseX, mouseY)) return;
   updateHoveredRing();
   if (hoveredRingIndex >= 0) {
@@ -732,6 +952,21 @@ function mousePressed() {
 function mouseDragged() {
   if (isDraggingDivider) {
     updatePaneRatioFromMouse(mouseX);
+    return;
+  }
+
+  if (isDraggingPhaseWheel) {
+    applyPhaseFromMouse(mouseX, mouseY);
+    return;
+  }
+
+  if (isDraggingBarAmplitude) {
+    var barDy = mouseY - lastDragY;
+    lastDragY = mouseY;
+    if (selectedRingIndex >= 0 && selectedRingIndex < termAmpOffsets.length) {
+      termAmpOffsets[selectedRingIndex] = clamp((termAmpOffsets[selectedRingIndex] || 0) - barDy * 0.004, -0.8, 1.0);
+      rebuildStaticPath();
+    }
     return;
   }
 
@@ -752,6 +987,8 @@ function mouseDragged() {
 function mouseReleased() {
   isDraggingDivider = false;
   isDraggingAmplitude = false;
+  isDraggingBarAmplitude = false;
+  isDraggingPhaseWheel = false;
   updateSelectedRingInfo();
 }
 
