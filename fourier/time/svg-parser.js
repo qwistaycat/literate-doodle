@@ -172,7 +172,8 @@ var namedDrawingsLoadState = null;
 var extraNamedDrawingCache = {
   kris: null,
   laoganma: null,
-  loopy: null
+  loopy: null,
+  star: null
 };
 
 function getNamedDrawingPaths(selection) {
@@ -182,6 +183,7 @@ function getNamedDrawingPaths(selection) {
   if (selection === "kris") return ["../krisvpype.svg", "krisvpype.svg", "../images/4.vpype/krisvpype.svg", "../../images/4.vpype/krisvpype.svg", "/images/4.vpype/krisvpype.svg"];
   if (selection === "laoganma") return ["../laoganmavpype.svg", "laoganmavpype.svg", "../images/4.vpype/laoganmavpype.svg", "../../images/4.vpype/laoganmavpype.svg", "/images/4.vpype/laoganmavpype.svg"];
   if (selection === "loopy") return ["../loopyvpype.svg", "loopyvpype.svg", "../images/4.vpype/loopyvpype.svg", "../../images/4.vpype/loopyvpype.svg", "/images/4.vpype/loopyvpype.svg"];
+  if (selection === "star") return ["../starvpype.svg", "starvpype.svg", "../images/4.vpype/starvpype.svg", "../../images/4.vpype/starvpype.svg", "/images/4.vpype/starvpype.svg"];
   return null;
 }
 
@@ -254,7 +256,7 @@ function ensureNamedDrawingsLoaded(done) {
 function loadNamedDrawing(selection, callback) {
   var candidatePaths = getNamedDrawingPaths(selection);
 
-  if (selection === "kris" || selection === "laoganma" || selection === "loopy") {
+  if (selection === "kris" || selection === "laoganma" || selection === "loopy" || selection === "star") {
     if (extraNamedDrawingCache[selection] && extraNamedDrawingCache[selection].length > 0) {
       callback(extraNamedDrawingCache[selection]);
       return;

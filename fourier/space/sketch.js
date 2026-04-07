@@ -1,5 +1,5 @@
 var fourierX = [];
-var drawingChoice = "laoganma";
+var drawingChoice = "star";
 var maxEpicycles = 1;
 var loading = true;
 var loadError = "";
