@@ -527,24 +527,9 @@ function drawSinePanel() {
   var phaseTickLabels = ["0", "π/2", "π", "3π/2", "2π"];
   var timeTheta = normalizeAngle0ToTwoPi(epicycleTime);
   var timeX = plotX + (timeTheta / TWO_PI) * plotW;
-  var combinedAtTime = 0;
-  var combinedMaxAbs = 1;
-
-  for (var markerTermIndex = 0; markerTermIndex < terms.length; markerTermIndex++) {
-    var markerTerm = terms[markerTermIndex];
-    combinedAtTime += markerTerm.amp * sin(markerTerm.freq * timeTheta + markerTerm.phase);
-  }
-
-  for (var markerSample = 0; markerSample <= samples; markerSample++) {
-    var markerTheta = (markerSample / samples) * TWO_PI;
-    var markerCombinedY = 0;
-    for (var markerSumIndex = 0; markerSumIndex < terms.length; markerSumIndex++) {
-      var markerSumTerm = terms[markerSumIndex];
-      markerCombinedY += markerSumTerm.amp * sin(markerSumTerm.freq * markerTheta + markerSumTerm.phase);
-    }
-    combinedMaxAbs = Math.max(combinedMaxAbs, Math.abs(markerCombinedY));
-  }
-  var markerY = yMid + (combinedAtTime / combinedMaxAbs) * (plotH * 0.44);
+  var sweepStroke = color(182, 212, 190, 180);
+  var sweepFill = color(182, 212, 190, 235);
+  var markerY = yMid;
 
   stroke(115, 128, 162, 45);
   strokeWeight(1);
@@ -557,7 +542,7 @@ function drawSinePanel() {
   strokeWeight(1);
   line(plotX, yMid, plotX + plotW, yMid);
 
-  stroke(255, 214, 140, 155);
+  stroke(sweepStroke);
   strokeWeight(1.5);
   line(timeX, plotY, timeX, plotY + plotH);
 
@@ -593,10 +578,15 @@ function drawSinePanel() {
       }
       endShape();
     }
-  } else {
-    var summed = [];
-    var maxSummedAbs = 1;
 
+    var markerTermIdx = selectedRingIndex >= 0 && selectedRingIndex < terms.length ? selectedRingIndex : 0;
+    var markerTermForBreakdown = terms[markerTermIdx];
+    if (markerTermForBreakdown) {
+      var markerAmpPx = (Math.abs(markerTermForBreakdown.amp) / maxAmp) * (plotH * 0.44);
+      markerY = yMid + markerAmpPx * sin(markerTermForBreakdown.freq * timeTheta + markerTermForBreakdown.phase);
+    }
+  } else {
+    var summedRaw = [];
     for (var s2 = 0; s2 <= samples; s2++) {
       var u2 = s2 / samples;
       var theta2 = u2 * TWO_PI;
@@ -605,25 +595,56 @@ function drawSinePanel() {
         var term2 = terms[tIndex];
         combinedY += term2.amp * sin(term2.freq * theta2 + term2.phase);
       }
-      summed.push(combinedY);
-      maxSummedAbs = Math.max(maxSummedAbs, Math.abs(combinedY));
+      summedRaw.push(combinedY);
     }
 
+    var smoothRadius = activeCount > 120 ? 4 : (activeCount > 60 ? 3 : 2);
+    var summedSmooth = [];
+    for (var smoothIndex = 0; smoothIndex <= samples; smoothIndex++) {
+      var acc = 0;
+      var n = 0;
+      for (var offset = -smoothRadius; offset <= smoothRadius; offset++) {
+        var sampleAt = smoothIndex + offset;
+        if (sampleAt < 0 || sampleAt > samples) continue;
+        acc += summedRaw[sampleAt];
+        n++;
+      }
+      summedSmooth.push(n > 0 ? acc / n : 0);
+    }
+
+    var absVals = [];
+    for (var absIdx = 0; absIdx <= samples; absIdx++) {
+      absVals.push(Math.abs(summedSmooth[absIdx]));
+    }
+    absVals.sort(function (a, b) { return a - b; });
+    var percentileIndex = Math.floor((absVals.length - 1) * 0.92);
+    var displayScale = Math.max(1e-6, absVals[percentileIndex] || 1);
+    var displayAmpPx = plotH * 0.44;
+
     noFill();
-    stroke(248, 230, 162, 242);
+    stroke(170, 205, 182, 242);
     strokeWeight(2.4);
     beginShape();
     for (var s3 = 0; s3 <= samples; s3++) {
       var u3 = s3 / samples;
       var x3 = plotX + u3 * plotW;
-      var y3 = yMid + (summed[s3] / maxSummedAbs) * (plotH * 0.44);
+      var normalizedY = clamp(summedSmooth[s3] / displayScale, -1.2, 1.2);
+      var y3 = yMid + normalizedY * displayAmpPx;
       vertex(x3, y3);
     }
     endShape();
+
+    var markerSamplePos = (timeTheta / TWO_PI) * samples;
+    var markerLo = Math.floor(markerSamplePos);
+    var markerHi = Math.min(samples, markerLo + 1);
+    var markerMix = markerSamplePos - markerLo;
+    var markerWaveVal = summedSmooth[markerLo] * (1 - markerMix) + summedSmooth[markerHi] * markerMix;
+    var markerNorm = clamp(markerWaveVal / displayScale, -1.2, 1.2);
+    markerY = yMid + markerNorm * displayAmpPx;
   }
   unclipRect();
 
-  fill(255, 214, 140, 220);
+  fill(sweepFill);
   noStroke();
   circle(timeX, markerY, 7);
 
@@ -1130,10 +1151,7 @@ function draw() {
   updateSelectedRingInfo();
 
   var dt = TWO_PI / Math.max(1, fourierX.length);
-  epicycleTime += dt;
-  if (epicycleTime > TWO_PI) {
-    epicycleTime = 0;
-  }
+  epicycleTime = normalizeAngle0ToTwoPi(epicycleTime + dt);
 }
 
 function mousePressed(mouseEvent) {
