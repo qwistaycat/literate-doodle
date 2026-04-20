@@ -1,5 +1,5 @@
 var fourierX = [];
-var drawingChoice = "star";
+var drawingChoice = "yu";
 var maxEpicycles = 1;
 var loading = true;
 var loadError = "";
@@ -11,6 +11,7 @@ var viewZoom = 1;
 var ringSnapshots = [];
 var hoveredRingIndex = -1;
 var selectedRingIndex = -1;
+var selectedRingIndices = [];
 var globalAmpNudge = 0;
 var termAmpOffsets = [];
 var termPhaseOffsets = [];
@@ -18,16 +19,88 @@ var isDraggingAmplitude = false;
 var lastDragY = 0;
 var drawingDataCache = {};
 var DRAWING_CACHE_PREFIX = "spaceDrawingCache_v1_";
-var SPLIT_RATIO_STORAGE_KEY = "spacePaneSplitRatio_v1";
+var SPLIT_RATIO_STORAGE_KEY = "spacePaneSplitRatio_v2";
 var paneTop = 56;
-var panePadding = 10;
-var leftPaneRatio = 0.58;
+var panePadding = 0;
+var leftPaneRatio = 0.44;
 var isDraggingDivider = false;
 var barChartItems = [];
 var hoveredBarIndex = -1;
 var isDraggingBarAmplitude = false;
 var phaseWheelGeom = null;
 var isDraggingPhaseWheel = false;
+var showWaveBreakdown = false;
+var showBarSelectMode = false;
+var isBrushingBarSelection = false;
+var barSelectionAnchorIndex = -1;
+var barSelectionCurrentIndex = -1;
+
+function isRingSelected(index) {
+  return selectedRingIndices.indexOf(index) >= 0;
+}
+
+function setSingleRingSelection(index) {
+  if (index < 0) {
+    selectedRingIndex = -1;
+    selectedRingIndices = [];
+    return;
+  }
+  selectedRingIndex = index;
+  selectedRingIndices = [index];
+}
+
+function toggleRingSelection(index) {
+  if (index < 0) return;
+  var at = selectedRingIndices.indexOf(index);
+  if (at >= 0) {
+    selectedRingIndices.splice(at, 1);
+  } else {
+    selectedRingIndices.push(index);
+  }
+
+  if (selectedRingIndices.length === 0) {
+    selectedRingIndex = -1;
+    return;
+  }
+
+  if (selectedRingIndices.indexOf(selectedRingIndex) < 0) {
+    selectedRingIndex = selectedRingIndices[0];
+  }
+}
+
+function getSelectedTargets() {
+  var targets = [];
+  for (var i = 0; i < selectedRingIndices.length; i++) {
+    var idx = selectedRingIndices[i];
+    if (idx >= 0 && idx < termAmpOffsets.length) targets.push(idx);
+  }
+  return targets;
+}
+
+function isMultiSelectEvent(mouseEvent) {
+  if (!mouseEvent) return false;
+  return !!(mouseEvent.shiftKey || mouseEvent.metaKey || mouseEvent.ctrlKey);
+}
+
+function clearBarSelection() {
+  selectedRingIndex = -1;
+  selectedRingIndices = [];
+  isBrushingBarSelection = false;
+  barSelectionAnchorIndex = -1;
+  barSelectionCurrentIndex = -1;
+  barSelectionAnchorIndex = -1;
+  barSelectionCurrentIndex = -1;
+}
+
+function selectBarRange(startIndex, endIndex) {
+  if (startIndex < 0 || endIndex < 0) return;
+  var a = Math.min(startIndex, endIndex);
+  var b = Math.max(startIndex, endIndex);
+  var selected = [];
+  for (var i = a; i <= b; i++) selected.push(i);
+  selectedRingIndices = selected;
+  selectedRingIndex = selected.length > 0 ? selected[0] : -1;
+}
 
 function processPoints(points) {
   if (!points || points.length === 0) {
@@ -104,6 +177,7 @@ function applyDrawingData(data) {
   globalAmpNudge = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
+  selectedRingIndices = [];
 
   var slider = document.getElementById("epicycle-slider");
   var sliderValue = document.getElementById("epicycle-slider-value");
@@ -302,10 +376,10 @@ function drawPhaseWheel(panel) {
 }
 
 function getPaneLayout() {
-  var x = panePadding;
+  var x = 0;
   var y = paneTop;
-  var w = width - panePadding * 2;
-  var h = height - paneTop - panePadding;
+  var w = width;
+  var h = height - paneTop;
   var gap = 10;
   var minPaneW = 220;
   var unclampedLeftW = Math.floor(w * leftPaneRatio);
@@ -358,8 +432,8 @@ function isNearDivider(sx, sy) {
 
 function updatePaneRatioFromMouse(mouseXPos) {
   var layout = getPaneLayout();
-  var totalW = width - panePadding * 2;
-  var leftW = mouseXPos - panePadding - 5;
+  var totalW = width;
+  var leftW = mouseXPos - 5;
   var ratio = leftW / totalW;
   leftPaneRatio = clamp(ratio, 0.35, 0.75);
   localStorage.setItem(SPLIT_RATIO_STORAGE_KEY, String(leftPaneRatio));
@@ -449,34 +523,109 @@ function drawSinePanel() {
   var barW = plotW;
   var barH = panel.y + panel.h - barY - 10;
   var samples = 170;
+  var phaseTickFractions = [0, 0.25, 0.5, 0.75, 1];
+  var phaseTickLabels = ["0", "π/2", "π", "3π/2", "2π"];
+  var timeTheta = normalizeAngle0ToTwoPi(epicycleTime);
+  var timeX = plotX + (timeTheta / TWO_PI) * plotW;
+  var combinedAtTime = 0;
+  var combinedMaxAbs = 1;
+
+  for (var markerTermIndex = 0; markerTermIndex < terms.length; markerTermIndex++) {
+    var markerTerm = terms[markerTermIndex];
+    combinedAtTime += markerTerm.amp * sin(markerTerm.freq * timeTheta + markerTerm.phase);
+  }
+
+  for (var markerSample = 0; markerSample <= samples; markerSample++) {
+    var markerTheta = (markerSample / samples) * TWO_PI;
+    var markerCombinedY = 0;
+    for (var markerSumIndex = 0; markerSumIndex < terms.length; markerSumIndex++) {
+      var markerSumTerm = terms[markerSumIndex];
+      markerCombinedY += markerSumTerm.amp * sin(markerSumTerm.freq * markerTheta + markerSumTerm.phase);
+    }
+    combinedMaxAbs = Math.max(combinedMaxAbs, Math.abs(markerCombinedY));
+  }
+  var markerY = yMid + (combinedAtTime / combinedMaxAbs) * (plotH * 0.44);
+
+  stroke(115, 128, 162, 45);
+  strokeWeight(1);
+  for (var tick = 0; tick < phaseTickFractions.length; tick++) {
+    var tickX = plotX + phaseTickFractions[tick] * plotW;
+    line(tickX, plotY, tickX, plotY + plotH);
+  }
 
   stroke(140, 150, 180, 70);
   strokeWeight(1);
   line(plotX, yMid, plotX + plotW, yMid);
 
+  stroke(255, 214, 140, 155);
+  strokeWeight(1.5);
+  line(timeX, plotY, timeX, plotY + plotH);
+
+  fill(205, 215, 240, 180);
+  textSize(10);
+  textAlign(CENTER, TOP);
+  for (var tickLabelIndex = 0; tickLabelIndex < phaseTickFractions.length; tickLabelIndex++) {
+    var tickLabelX = plotX + phaseTickFractions[tickLabelIndex] * plotW;
+    text(phaseTickLabels[tickLabelIndex], tickLabelX, plotY + plotH + 1);
+  }
+  textAlign(LEFT, TOP);
+
   clipRect(plotX, plotY, plotW, plotH);
-  for (var k = 0; k < terms.length; k++) {
-    var term = terms[k];
-    var phaseHue = normalizeAngle0ToTwoPi(termPhaseOffsets[k] || 0) * 180 / PI;
-    var alpha = clamp(220 - activeCount * 1.8, 22, 160);
-    if (k === selectedRingIndex) alpha = 230;
-    colorMode(HSB, 360, 100, 100, 255);
-    stroke(phaseHue, 82, 100, alpha);
-    colorMode(RGB, 255, 255, 255, 255);
-    strokeWeight(k === selectedRingIndex ? 1.9 : 1);
+  if (showWaveBreakdown) {
+    for (var k = 0; k < terms.length; k++) {
+      var term = terms[k];
+      var phaseHue = normalizeAngle0ToTwoPi(termPhaseOffsets[k] || 0) * 180 / PI;
+      var alpha = clamp(220 - activeCount * 1.8, 22, 160);
+      if (isRingSelected(k)) alpha = 230;
+      colorMode(HSB, 360, 100, 100, 255);
+      stroke(phaseHue, 82, 100, alpha);
+      colorMode(RGB, 255, 255, 255, 255);
+      strokeWeight(isRingSelected(k) ? 1.9 : 1);
+      noFill();
+      beginShape();
+      for (var s = 0; s <= samples; s++) {
+        var u = s / samples;
+        var x = plotX + u * plotW;
+        var theta = u * TWO_PI;
+        var ampPx = (Math.abs(term.amp) / maxAmp) * (plotH * 0.44);
+        var y = yMid + ampPx * sin(term.freq * theta + term.phase);
+        vertex(x, y);
+      }
+      endShape();
+    }
+  } else {
+    var summed = [];
+    var maxSummedAbs = 1;
+
+    for (var s2 = 0; s2 <= samples; s2++) {
+      var u2 = s2 / samples;
+      var theta2 = u2 * TWO_PI;
+      var combinedY = 0;
+      for (var tIndex = 0; tIndex < terms.length; tIndex++) {
+        var term2 = terms[tIndex];
+        combinedY += term2.amp * sin(term2.freq * theta2 + term2.phase);
+      }
+      summed.push(combinedY);
+      maxSummedAbs = Math.max(maxSummedAbs, Math.abs(combinedY));
+    }
+
     noFill();
+    stroke(248, 230, 162, 242);
+    strokeWeight(2.4);
     beginShape();
-    for (var s = 0; s <= samples; s++) {
-      var u = s / samples;
-      var x = plotX + u * plotW;
-      var theta = u * TWO_PI;
-      var ampPx = (Math.abs(term.amp) / maxAmp) * (plotH * 0.44);
-      var y = yMid + ampPx * sin(term.freq * theta + term.phase + epicycleTime);
-      vertex(x, y);
+    for (var s3 = 0; s3 <= samples; s3++) {
+      var u3 = s3 / samples;
+      var x3 = plotX + u3 * plotW;
+      var y3 = yMid + (summed[s3] / maxSummedAbs) * (plotH * 0.44);
+      vertex(x3, y3);
     }
     endShape();
   }
   unclipRect();
+
+  fill(255, 214, 140, 220);
+  noStroke();
+  circle(timeX, markerY, 7);
 
   var maxFreq = 1;
   for (var f = 0; f < terms.length; f++) {
@@ -504,10 +653,10 @@ function drawSinePanel() {
     var bx = barX + b * barSlot + Math.max(1, barSlot * 0.08);
     var bw = Math.max(3, barSlot * 0.84);
     var by = baseY - barHeight;
-    var barAlpha = b === selectedRingIndex ? 245 : 185;
+    var barAlpha = isRingSelected(b) ? 245 : 185;
     var barHue = normalizeAngle0ToTwoPi(termPhaseOffsets[b] || 0) * 180 / PI;
     colorMode(HSB, 360, 100, 100, 255);
-    fill(barHue, 76, b === selectedRingIndex ? 98 : 88, barAlpha);
+    fill(barHue, 76, isRingSelected(b) ? 98 : 88, barAlpha);
     colorMode(RGB, 255, 255, 255, 255);
     noStroke();
     rect(bx, by, bw, barHeight, 3);
@@ -545,11 +694,38 @@ function drawSinePanel() {
   fill(205, 215, 240, 190);
   noStroke();
   textSize(11);
-  if (selectedRingIndex >= 0 && selectedRingIndex < terms.length) {
+  if (selectedRingIndices.length > 1) {
+    text((showWaveBreakdown ? "breakdown" : "combined") + " • selected " + selectedRingIndices.length + " terms", plotX + 2, plotY + 4);
+  } else if (selectedRingIndex >= 0 && selectedRingIndex < terms.length) {
     var st = terms[selectedRingIndex];
-    text("selected: amp " + nf(st.amp, 1, 2) + " • freq " + nf(st.freq, 1, 2), plotX + 2, plotY + 4);
+    text((showWaveBreakdown ? "breakdown" : "combined") + " • selected: amp " + nf(st.amp, 1, 2) + " • freq " + nf(st.freq, 1, 2), plotX + 2, plotY + 4);
   } else {
-    text("showing " + activeCount + " waves", plotX + 2, plotY + 4);
+    text((showWaveBreakdown ? "breakdown" : "combined") + " • using " + activeCount + " terms", plotX + 2, plotY + 4);
+  }
+
+  textAlign(RIGHT, TOP);
+  text("t = " + nf(timeTheta / PI, 1, 2) + "π", plotX + plotW - 2, plotY + 4);
+  textAlign(LEFT, TOP);
+
+  if (showBarSelectMode) {
+    fill(255, 214, 128, 160);
+    noStroke();
+    rect(barX + 2, barY + 2, 110, 18, 6);
+    fill(28, 18, 8, 230);
+    textSize(10);
+    text("drag across bars", barX + 10, barY + 6);
+    if (isBrushingBarSelection && barSelectionAnchorIndex >= 0 && barSelectionCurrentIndex >= 0) {
+      var r1 = Math.min(barSelectionAnchorIndex, barSelectionCurrentIndex);
+      var r2 = Math.max(barSelectionAnchorIndex, barSelectionCurrentIndex);
+      if (barChartItems[r1] && barChartItems[r2]) {
+        var sx = barChartItems[r1].x - 2;
+        var ex = barChartItems[r2].x + barChartItems[r2].w + 2;
+        fill(255, 210, 120, 38);
+        stroke(255, 210, 120, 220);
+        strokeWeight(2);
+        rect(sx, barTopLimit - 4, ex - sx, barBottomLimit - barTopLimit + 8, 8);
+      }
+    }
   }
 
   drawPhaseWheel(panel);
@@ -592,6 +768,11 @@ function updateSelectedRingInfo() {
     return;
   }
 
+  if (selectedRingIndices.length > 1) {
+    info.textContent = "Selected " + selectedRingIndices.length + " rings";
+    return;
+  }
+
   if (selectedRingIndex >= 0 && selectedRingIndex < fourierX.length) {
     var term = fourierX[selectedRingIndex];
     info.textContent = "Selected ring " + (selectedRingIndex + 1) + " • freq " + nf(term.freq, 1, 2);
@@ -631,13 +812,17 @@ function resetPlayInteraction() {
   for (var j = 0; j < termPhaseOffsets.length; j++) termPhaseOffsets[j] = 0;
   hoveredRingIndex = -1;
   selectedRingIndex = -1;
+  selectedRingIndices = [];
+  isBrushingBarSelection = false;
+  barSelectionAnchorIndex = -1;
+  barSelectionCurrentIndex = -1;
   phaseWheelGeom = null;
   isDraggingPhaseWheel = false;
   rebuildStaticPath();
 }
 
 function setup() {
-  createCanvas(800, 600);
+  createCanvas(windowWidth, windowHeight);
 
   function applyEpicycleCountFromInput(rawValue) {
     var slider = document.getElementById("epicycle-slider");
@@ -669,6 +854,7 @@ function setup() {
 
   var select = document.getElementById("drawing-select");
   if (select) {
+    select.value = drawingChoice;
     drawingChoice = select.value;
     select.addEventListener("change", function (e) {
       drawingChoice = e.target.value;
@@ -710,6 +896,33 @@ function setup() {
     });
   }
 
+  var waveViewToggle = document.getElementById("toggle-wave-view");
+  if (waveViewToggle) {
+    waveViewToggle.textContent = showWaveBreakdown ? "Show combined" : "Show breakdown";
+    waveViewToggle.addEventListener("click", function () {
+      showWaveBreakdown = !showWaveBreakdown;
+      waveViewToggle.textContent = showWaveBreakdown ? "Show combined" : "Show breakdown";
+    });
+  }
+
+  var barSelectToggle = document.getElementById("toggle-bar-select");
+  if (barSelectToggle) {
+    barSelectToggle.textContent = showBarSelectMode ? "Done selecting" : "Select bars";
+    barSelectToggle.addEventListener("click", function () {
+      showBarSelectMode = !showBarSelectMode;
+      barSelectToggle.textContent = showBarSelectMode ? "Done selecting" : "Select bars";
+    });
+  }
+
+  var clearBarSelectionButton = document.getElementById("clear-bar-selection");
+  if (clearBarSelectionButton) {
+    clearBarSelectionButton.addEventListener("click", function () {
+      clearBarSelection();
+      updateSelectedRingInfo();
+      redraw();
+    });
+  }
+
   var resetPlayButton = document.getElementById("reset-play");
   if (resetPlayButton) {
     resetPlayButton.addEventListener("click", function () {
@@ -718,6 +931,10 @@ function setup() {
   }
 
   loadSelectedDrawing();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
 
 function loadSelectedDrawing() {
@@ -804,7 +1021,7 @@ function drawEpicycleOverlay() {
       var displayRadius = seg.amp < 1.25 ? 1.25 : seg.amp;
       var displayRadiusScreen = displayRadius * viewZoom;
       var isHover = seg.index === hoveredRingIndex;
-      var isSelected = seg.index === selectedRingIndex;
+      var isSelected = isRingSelected(seg.index);
       var circleAlpha = seg.amp < 2 ? 210 : (seg.amp < 6 ? 150 : 90);
       var circleWeight = seg.amp < 2 ? 1.6 : (seg.amp < 6 ? 1.2 : 1.0);
 
@@ -904,7 +1121,9 @@ function draw() {
   fill(225, 200, 255, 200);
   textAlign(LEFT, CENTER);
   textSize(11);
-  var ampText = selectedRingIndex >= 0
+  var ampText = selectedRingIndices.length > 1
+    ? "Drag a selected bar up/down to change selected rings together"
+    : selectedRingIndex >= 0
     ? "Drag up/down to change selected ring amplitude"
     : "Drag up/down to change global amplitudes";
   text(ampText, layout.left.x + 10, layout.left.y + layout.left.h - 14);
@@ -917,7 +1136,7 @@ function draw() {
   }
 }
 
-function mousePressed() {
+function mousePressed(mouseEvent) {
   if (isNearDivider(mouseX, mouseY)) {
     isDraggingDivider = true;
     return;
@@ -930,7 +1149,24 @@ function mousePressed() {
   }
 
   if (hoveredBarIndex >= 0 && hoveredBarIndex < barChartItems.length) {
-    selectedRingIndex = barChartItems[hoveredBarIndex].termIndex;
+    var barTermIndex = barChartItems[hoveredBarIndex].termIndex;
+    if (showBarSelectMode) {
+      isBrushingBarSelection = true;
+      barSelectionAnchorIndex = barTermIndex;
+      barSelectionCurrentIndex = barTermIndex;
+      selectBarRange(barSelectionAnchorIndex, barSelectionCurrentIndex);
+      updateSelectedRingInfo();
+      redraw();
+      return;
+    }
+    if (isMultiSelectEvent(mouseEvent)) {
+      toggleRingSelection(barTermIndex);
+      updateSelectedRingInfo();
+      return;
+    }
+    if (!isRingSelected(barTermIndex)) {
+      setSingleRingSelection(barTermIndex);
+    }
     isDraggingBarAmplitude = true;
     lastDragY = mouseY;
     updateSelectedRingInfo();
@@ -940,9 +1176,13 @@ function mousePressed() {
   if (!inLeftPane(mouseX, mouseY)) return;
   updateHoveredRing();
   if (hoveredRingIndex >= 0) {
-    selectedRingIndex = hoveredRingIndex;
+    if (keyIsDown(SHIFT)) {
+      toggleRingSelection(hoveredRingIndex);
+    } else {
+      setSingleRingSelection(hoveredRingIndex);
+    }
   } else if (!keyIsDown(SHIFT)) {
-    selectedRingIndex = -1;
+    setSingleRingSelection(-1);
   }
   isDraggingAmplitude = true;
   lastDragY = mouseY;
@@ -955,6 +1195,17 @@ function mouseDragged() {
     return;
   }
 
+  if (isBrushingBarSelection) {
+    var brushHit = findBarAt(mouseX, mouseY);
+    if (brushHit >= 0 && brushHit < barChartItems.length) {
+      barSelectionCurrentIndex = barChartItems[brushHit].termIndex;
+      selectBarRange(barSelectionAnchorIndex, barSelectionCurrentIndex);
+      updateSelectedRingInfo();
+      redraw();
+    }
+    return;
+  }
+
   if (isDraggingPhaseWheel) {
     applyPhaseFromMouse(mouseX, mouseY);
     return;
@@ -963,8 +1214,12 @@ function mouseDragged() {
   if (isDraggingBarAmplitude) {
     var barDy = mouseY - lastDragY;
     lastDragY = mouseY;
-    if (selectedRingIndex >= 0 && selectedRingIndex < termAmpOffsets.length) {
-      termAmpOffsets[selectedRingIndex] = clamp((termAmpOffsets[selectedRingIndex] || 0) - barDy * 0.004, -0.8, 1.0);
+    var barTargets = getSelectedTargets();
+    if (barTargets.length > 0) {
+      for (var b = 0; b < barTargets.length; b++) {
+        var tIndex = barTargets[b];
+        termAmpOffsets[tIndex] = clamp((termAmpOffsets[tIndex] || 0) - barDy * 0.004, -0.8, 1.0);
+      }
       rebuildStaticPath();
     }
     return;
@@ -989,6 +1244,9 @@ function mouseReleased() {
   isDraggingAmplitude = false;
   isDraggingBarAmplitude = false;
   isDraggingPhaseWheel = false;
+  isBrushingBarSelection = false;
+  barSelectionAnchorIndex = -1;
+  barSelectionCurrentIndex = -1;
   updateSelectedRingInfo();
 }
 

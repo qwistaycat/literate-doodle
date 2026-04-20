@@ -184,6 +184,7 @@ function getNamedDrawingPaths(selection) {
   if (selection === "laoganma") return ["../laoganmavpype.svg", "laoganmavpype.svg", "../images/4.vpype/laoganmavpype.svg", "../../images/4.vpype/laoganmavpype.svg", "/images/4.vpype/laoganmavpype.svg"];
   if (selection === "loopy") return ["../loopyvpype.svg", "loopyvpype.svg", "../images/4.vpype/loopyvpype.svg", "../../images/4.vpype/loopyvpype.svg", "/images/4.vpype/loopyvpype.svg"];
   if (selection === "star") return ["../starvpype.svg", "starvpype.svg", "../images/4.vpype/starvpype.svg", "../../images/4.vpype/starvpype.svg", "/images/4.vpype/starvpype.svg"];
+  if (selection === "yu") return ["../yu-vpype.svg", "yu-vpype.svg", "./space/yu-vpype.svg", "../space/yu-vpype.svg", "../yu-vpype-smooth.svg", "yu-vpype-smooth.svg", "./space/yu-vpype-smooth.svg", "../space/yu-vpype-smooth.svg", "../images/4.vpype/yu-vpype.svg", "../../images/4.vpype/yu-vpype.svg", "/images/4.vpype/yu-vpype.svg", "../images/4.vpype/yu-vpype-smooth.svg", "../../images/4.vpype/yu-vpype-smooth.svg", "/images/4.vpype/yu-vpype-smooth.svg"];
   return null;
 }
 
@@ -256,7 +257,7 @@ function ensureNamedDrawingsLoaded(done) {
 function loadNamedDrawing(selection, callback) {
   var candidatePaths = getNamedDrawingPaths(selection);
 
-  if (selection === "kris" || selection === "laoganma" || selection === "loopy" || selection === "star") {
+   if (selection === "kris" || selection === "laoganma" || selection === "loopy" || selection === "star" || selection === "yu") {
     if (extraNamedDrawingCache[selection] && extraNamedDrawingCache[selection].length > 0) {
       callback(extraNamedDrawingCache[selection]);
       return;
