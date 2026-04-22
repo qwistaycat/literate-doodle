@@ -30,10 +30,14 @@ var isDraggingBarAmplitude = false;
 var phaseWheelGeom = null;
 var isDraggingPhaseWheel = false;
 var showWaveBreakdown = false;
-var showBarSelectMode = false;
 var isBrushingBarSelection = false;
 var barSelectionAnchorIndex = -1;
 var barSelectionCurrentIndex = -1;
+var pendingBarGesture = false;
+var pendingBarTermIndex = -1;
+var pendingBarStartX = 0;
+var pendingBarStartY = 0;
+var pendingBarGestureMode = "";
 
 function isRingSelected(index) {
   return selectedRingIndices.indexOf(index) >= 0;
@@ -88,8 +92,9 @@ function clearBarSelection() {
   isBrushingBarSelection = false;
   barSelectionAnchorIndex = -1;
   barSelectionCurrentIndex = -1;
-  barSelectionAnchorIndex = -1;
-  barSelectionCurrentIndex = -1;
+  pendingBarGesture = false;
+  pendingBarTermIndex = -1;
+  pendingBarGestureMode = "";
 }
 
 function selectBarRange(startIndex, endIndex) {
@@ -303,7 +308,14 @@ function applyPhaseFromMouse(sx, sy) {
   var dx = sx - phaseWheelGeom.cx;
   var dy = sy - phaseWheelGeom.cy;
   var absolutePhase = normalizeAngle0ToTwoPi(Math.atan2(dy, dx));
-  termPhaseOffsets[selectedRingIndex] = normalizeToPi(absolutePhase);
+  var phaseTargets = getSelectedTargets();
+  if (phaseTargets.length > 1) {
+    for (var p = 0; p < phaseTargets.length; p++) {
+      termPhaseOffsets[phaseTargets[p]] = normalizeToPi(absolutePhase);
+    }
+  } else {
+    termPhaseOffsets[selectedRingIndex] = normalizeToPi(absolutePhase);
+  }
   rebuildStaticPath();
 }
 
@@ -522,7 +534,7 @@ function drawSinePanel() {
   var barY = plotY + plotH + barGap;
   var barW = plotW;
   var barH = panel.y + panel.h - barY - 10;
-  var samples = 170;
+  var samples = Math.max(220, Math.min(520, Math.floor(plotW * 0.55)));
   var phaseTickFractions = [0, 0.25, 0.5, 0.75, 1];
   var phaseTickLabels = ["0", "π/2", "π", "3π/2", "2π"];
   var timeTheta = normalizeAngle0ToTwoPi(epicycleTime);
@@ -598,7 +610,7 @@ function drawSinePanel() {
       summedRaw.push(combinedY);
     }
 
-    var smoothRadius = activeCount > 120 ? 4 : (activeCount > 60 ? 3 : 2);
+    var smoothRadius = activeCount > 120 ? 6 : (activeCount > 60 ? 5 : 4);
     var summedSmooth = [];
     for (var smoothIndex = 0; smoothIndex <= samples; smoothIndex++) {
       var acc = 0;
@@ -621,18 +633,48 @@ function drawSinePanel() {
     var displayScale = Math.max(1e-6, absVals[percentileIndex] || 1);
     var displayAmpPx = plotH * 0.44;
 
-    noFill();
-    stroke(170, 205, 182, 242);
-    strokeWeight(2.4);
-    beginShape();
+    var displayX = [];
+    var displayY = [];
+    var displayPenUp = [];
     for (var s3 = 0; s3 <= samples; s3++) {
       var u3 = s3 / samples;
       var x3 = plotX + u3 * plotW;
       var normalizedY = clamp(summedSmooth[s3] / displayScale, -1.2, 1.2);
       var y3 = yMid + normalizedY * displayAmpPx;
-      vertex(x3, y3);
+      displayX.push(x3);
+      displayY.push(y3);
+      if (bridgeFlags && bridgeFlags.length > 0) {
+        var bridgeIndex = Math.floor(u3 * bridgeFlags.length) % bridgeFlags.length;
+        displayPenUp.push(!!bridgeFlags[bridgeIndex]);
+      } else {
+        displayPenUp.push(false);
+      }
     }
-    endShape();
+
+    noFill();
+    var segStart = 0;
+    var lastIdx = displayX.length - 1;
+    while (segStart <= lastIdx) {
+      var segPenUp = displayPenUp[segStart];
+      var segEnd = segStart;
+      while (segEnd + 1 <= lastIdx && displayPenUp[segEnd + 1] === segPenUp) {
+        segEnd++;
+      }
+
+      var drawFrom = Math.max(0, segStart - 1);
+      var drawTo = Math.min(lastIdx, segEnd + 1);
+      stroke(170, 205, 182, segPenUp ? 88 : 242);
+      strokeWeight(segPenUp ? 1.6 : 2.4);
+      beginShape();
+      curveVertex(displayX[drawFrom], displayY[drawFrom]);
+      for (var cv = drawFrom; cv <= drawTo; cv++) {
+        curveVertex(displayX[cv], displayY[cv]);
+      }
+      curveVertex(displayX[drawTo], displayY[drawTo]);
+      endShape();
+
+      segStart = segEnd + 1;
+    }
 
     var markerSamplePos = (timeTheta / TWO_PI) * samples;
     var markerLo = Math.floor(markerSamplePos);
@@ -641,6 +683,13 @@ function drawSinePanel() {
     var markerWaveVal = summedSmooth[markerLo] * (1 - markerMix) + summedSmooth[markerHi] * markerMix;
     var markerNorm = clamp(markerWaveVal / displayScale, -1.2, 1.2);
     markerY = yMid + markerNorm * displayAmpPx;
+
+    if (bridgeFlags && bridgeFlags.length > 0) {
+      var markerBridgeIndex = Math.floor((timeTheta / TWO_PI) * bridgeFlags.length) % bridgeFlags.length;
+      if (bridgeFlags[markerBridgeIndex]) {
+        sweepFill = color(182, 212, 190, 135);
+      }
+    }
   }
   unclipRect();
 
@@ -656,6 +705,8 @@ function drawSinePanel() {
   var barTopLimit = barY + 10;
   var barBottomLimit = barY + barH - 10;
   var barSlot = terms.length > 0 ? barW / terms.length : barW;
+  var maxAmpSafe = Math.max(1e-9, maxAmp);
+  var minDb = -72;
   barChartItems = [];
 
   fill(18, 24, 35, 170);
@@ -669,7 +720,11 @@ function drawSinePanel() {
   for (var b = 0; b < terms.length; b++) {
     var bt = terms[b];
     var absAmp = Math.abs(bt.amp);
-    var normH = (absAmp / maxAmp) * (baseY - barTopLimit);
+    var normAmp = Math.max(1e-9, absAmp / maxAmpSafe);
+    var ampDb = 20 * (Math.log(normAmp) / Math.LN10);
+    var clampedDb = Math.max(minDb, ampDb);
+    var dbNorm = (clampedDb - minDb) / (0 - minDb);
+    var normH = dbNorm * (baseY - barTopLimit);
     var barHeight = Math.max(2, normH);
     var bx = barX + b * barSlot + Math.max(1, barSlot * 0.08);
     var bw = Math.max(3, barSlot * 0.84);
@@ -705,9 +760,9 @@ function drawSinePanel() {
   fill(205, 215, 240, 150);
   noStroke();
   textSize(10);
-  text("frequency × amplitude", barX + 2, barY + 2);
+  text("frequency × log amplitude (dB)", barX + 2, barY + 2);
   textAlign(LEFT, TOP);
-  text("Amplitude", barX + 6, barTopLimit + 2);
+  text("Amplitude (dB)", barX + 6, barTopLimit + 2);
   textAlign(CENTER, TOP);
   text("Frequency", barX + barW * 0.5, baseY + 6);
   textAlign(LEFT, TOP);
@@ -728,24 +783,24 @@ function drawSinePanel() {
   text("t = " + nf(timeTheta / PI, 1, 2) + "π", plotX + plotW - 2, plotY + 4);
   textAlign(LEFT, TOP);
 
-  if (showBarSelectMode) {
-    fill(255, 214, 128, 160);
-    noStroke();
-    rect(barX + 2, barY + 2, 110, 18, 6);
-    fill(28, 18, 8, 230);
-    textSize(10);
-    text("drag across bars", barX + 10, barY + 6);
-    if (isBrushingBarSelection && barSelectionAnchorIndex >= 0 && barSelectionCurrentIndex >= 0) {
-      var r1 = Math.min(barSelectionAnchorIndex, barSelectionCurrentIndex);
-      var r2 = Math.max(barSelectionAnchorIndex, barSelectionCurrentIndex);
-      if (barChartItems[r1] && barChartItems[r2]) {
-        var sx = barChartItems[r1].x - 2;
-        var ex = barChartItems[r2].x + barChartItems[r2].w + 2;
-        fill(255, 210, 120, 38);
-        stroke(255, 210, 120, 220);
-        strokeWeight(2);
-        rect(sx, barTopLimit - 4, ex - sx, barBottomLimit - barTopLimit + 8, 8);
-      }
+  var hintW = 360;
+  fill(184, 226, 199, 165);
+  noStroke();
+  rect(barX + 2, barY + 2, hintW, 18, 6);
+  fill(18, 24, 20, 230);
+  textSize(10);
+  text("Horizontal drag = multi-select range • Vertical drag = adjust selected bars", barX + 8, barY + 6);
+
+  if (isBrushingBarSelection && barSelectionAnchorIndex >= 0 && barSelectionCurrentIndex >= 0) {
+    var r1 = Math.min(barSelectionAnchorIndex, barSelectionCurrentIndex);
+    var r2 = Math.max(barSelectionAnchorIndex, barSelectionCurrentIndex);
+    if (barChartItems[r1] && barChartItems[r2]) {
+      var sx = barChartItems[r1].x - 2;
+      var ex = barChartItems[r2].x + barChartItems[r2].w + 2;
+      fill(190, 230, 205, 45);
+      stroke(190, 230, 205, 230);
+      strokeWeight(2);
+      rect(sx, barTopLimit - 4, ex - sx, barBottomLimit - barTopLimit + 8, 8);
     }
   }
 
@@ -837,6 +892,9 @@ function resetPlayInteraction() {
   isBrushingBarSelection = false;
   barSelectionAnchorIndex = -1;
   barSelectionCurrentIndex = -1;
+  pendingBarGesture = false;
+  pendingBarTermIndex = -1;
+  pendingBarGestureMode = "";
   phaseWheelGeom = null;
   isDraggingPhaseWheel = false;
   rebuildStaticPath();
@@ -923,15 +981,6 @@ function setup() {
     waveViewToggle.addEventListener("click", function () {
       showWaveBreakdown = !showWaveBreakdown;
       waveViewToggle.textContent = showWaveBreakdown ? "Show combined" : "Show breakdown";
-    });
-  }
-
-  var barSelectToggle = document.getElementById("toggle-bar-select");
-  if (barSelectToggle) {
-    barSelectToggle.textContent = showBarSelectMode ? "Done selecting" : "Select bars";
-    barSelectToggle.addEventListener("click", function () {
-      showBarSelectMode = !showBarSelectMode;
-      barSelectToggle.textContent = showBarSelectMode ? "Done selecting" : "Select bars";
     });
   }
 
@@ -1168,33 +1217,44 @@ function mousePressed(mouseEvent) {
 
   if (hoveredBarIndex >= 0 && hoveredBarIndex < barChartItems.length) {
     var barTermIndex = barChartItems[hoveredBarIndex].termIndex;
-    if (showBarSelectMode) {
-      isBrushingBarSelection = true;
-      barSelectionAnchorIndex = barTermIndex;
-      barSelectionCurrentIndex = barTermIndex;
-      selectBarRange(barSelectionAnchorIndex, barSelectionCurrentIndex);
-      updateSelectedRingInfo();
-      redraw();
-      return;
-    }
     if (isMultiSelectEvent(mouseEvent)) {
       toggleRingSelection(barTermIndex);
       updateSelectedRingInfo();
       return;
     }
+
     if (!isRingSelected(barTermIndex)) {
       setSingleRingSelection(barTermIndex);
     }
-    isDraggingBarAmplitude = true;
-    lastDragY = mouseY;
+
+    pendingBarGesture = true;
+    pendingBarTermIndex = barTermIndex;
+    pendingBarStartX = mouseX;
+    pendingBarStartY = mouseY;
+    pendingBarGestureMode = "";
+    isBrushingBarSelection = false;
+    barSelectionAnchorIndex = -1;
+    barSelectionCurrentIndex = -1;
+
     updateSelectedRingInfo();
     return;
   }
 
-  if (!inLeftPane(mouseX, mouseY)) return;
+  pendingBarGesture = false;
+  pendingBarTermIndex = -1;
+  pendingBarGestureMode = "";
+
+  if (!inLeftPane(mouseX, mouseY)) {
+    if (!isMultiSelectEvent(mouseEvent)) {
+      setSingleRingSelection(-1);
+      updateSelectedRingInfo();
+    }
+    return;
+  }
+
   updateHoveredRing();
   if (hoveredRingIndex >= 0) {
-    if (keyIsDown(SHIFT)) {
+    if (isMultiSelectEvent(mouseEvent) || keyIsDown(SHIFT)) {
       toggleRingSelection(hoveredRingIndex);
     } else {
       setSingleRingSelection(hoveredRingIndex);
@@ -1211,6 +1271,53 @@ function mouseDragged() {
   if (isDraggingDivider) {
     updatePaneRatioFromMouse(mouseX);
     return;
+  }
+
+  if (pendingBarGesture) {
+    var gdx = mouseX - pendingBarStartX;
+    var gdy = mouseY - pendingBarStartY;
+
+    if (!pendingBarGestureMode) {
+      if (Math.abs(gdx) >= 6 && Math.abs(gdx) > Math.abs(gdy)) {
+        pendingBarGestureMode = "brush";
+        isBrushingBarSelection = true;
+        barSelectionAnchorIndex = pendingBarTermIndex;
+        barSelectionCurrentIndex = pendingBarTermIndex;
+        selectBarRange(barSelectionAnchorIndex, barSelectionCurrentIndex);
+        updateSelectedRingInfo();
+      } else if (Math.abs(gdy) >= 6) {
+        pendingBarGestureMode = "amplitude";
+        isDraggingBarAmplitude = true;
+        lastDragY = mouseY;
+      } else {
+        return;
+      }
+    }
+
+    if (pendingBarGestureMode === "brush") {
+      var pendingBrushHit = findBarAt(mouseX, mouseY);
+      if (pendingBrushHit >= 0 && pendingBrushHit < barChartItems.length) {
+        barSelectionCurrentIndex = barChartItems[pendingBrushHit].termIndex;
+        selectBarRange(barSelectionAnchorIndex, barSelectionCurrentIndex);
+        updateSelectedRingInfo();
+      }
+      redraw();
+      return;
+    }
+
+    if (pendingBarGestureMode === "amplitude") {
+      var pendingBarDy = mouseY - lastDragY;
+      lastDragY = mouseY;
+      var pendingBarTargets = getSelectedTargets();
+      if (pendingBarTargets.length > 0) {
+        for (var pb = 0; pb < pendingBarTargets.length; pb++) {
+          var ptIndex = pendingBarTargets[pb];
+          termAmpOffsets[ptIndex] = clamp((termAmpOffsets[ptIndex] || 0) - pendingBarDy * 0.004, -0.8, 1.0);
+        }
+        rebuildStaticPath();
+      }
+      return;
+    }
   }
 
   if (isBrushingBarSelection) {
@@ -1265,6 +1372,9 @@ function mouseReleased() {
   isBrushingBarSelection = false;
   barSelectionAnchorIndex = -1;
   barSelectionCurrentIndex = -1;
+  pendingBarGesture = false;
+  pendingBarTermIndex = -1;
+  pendingBarGestureMode = "";
   updateSelectedRingInfo();
 }
 
