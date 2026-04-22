@@ -30,6 +30,18 @@ var isDraggingBarAmplitude = false;
 var phaseWheelGeom = null;
 var isDraggingPhaseWheel = false;
 var showWaveBreakdown = false;
+var viewMode = "2d";
+var view3dYaw = -0.7;
+var view3dPitch = 0.45;
+var isDragging3DRotate = false;
+var last3DMouseX = 0;
+var last3DMouseY = 0;
+var parameterSlices = [];
+var lastParameterSignature = "";
+var lastSliceCaptureMillis = 0;
+var maxParameterSlices = 400;
+var timelineScrollOffset = 0;
+var timelineVisibleCount = 24;
 var isBrushingBarSelection = false;
 var barSelectionAnchorIndex = -1;
 var barSelectionCurrentIndex = -1;
@@ -198,7 +210,12 @@ function applyDrawingData(data) {
 
   loadError = "";
   loading = false;
+  parameterSlices = [];
+  lastParameterSignature = "";
+  lastSliceCaptureMillis = 0;
+  timelineScrollOffset = 0;
   rebuildStaticPath();
+  captureParameterSlice(true);
   redraw();
 }
 
@@ -256,6 +273,65 @@ function rebuildStaticPath() {
       bridge: bridgeFlags.length > 0 ? !!bridgeFlags[i % bridgeFlags.length] : false
     });
   }
+}
+
+function getParameterSignature() {
+  var activeCount = Math.max(1, Math.min(maxEpicycles || 1, fourierX ? fourierX.length : 0));
+  var ampHash = 0;
+  var phaseHash = 0;
+  var m = 2147483647;
+
+  for (var i = 0; i < activeCount; i++) {
+    var ampQ = Math.round((termAmpOffsets[i] || 0) * 200);
+    var phaseQ = Math.round((termPhaseOffsets[i] || 0) * 140);
+    ampHash = (ampHash * 131 + ampQ + i * 17 + 97) % m;
+    phaseHash = (phaseHash * 137 + phaseQ + i * 13 + 193) % m;
+  }
+
+  return [
+    drawingChoice,
+    activeCount,
+    Math.round(globalAmpNudge * 200),
+    ampHash,
+    phaseHash
+  ].join("|");
+}
+
+function captureParameterSlice(force) {
+  if (!reconstructedPath || reconstructedPath.length < 2) return;
+
+  var now = millis();
+  var signature = getParameterSignature();
+  if (!force && signature === lastParameterSignature) return;
+  if (!force && now - lastSliceCaptureMillis < 90) return;
+
+  var stride = Math.max(1, Math.floor(reconstructedPath.length / 460));
+  var points = [];
+  for (var i = 0; i < reconstructedPath.length; i += stride) {
+    var p = reconstructedPath[i];
+    points.push({ x: p.x, y: p.y, bridge: !!p.bridge });
+  }
+  var lastPoint = reconstructedPath[reconstructedPath.length - 1];
+  if (points.length === 0 || points[points.length - 1] !== lastPoint) {
+    points.push({ x: lastPoint.x, y: lastPoint.y, bridge: !!lastPoint.bridge });
+  }
+
+  parameterSlices.push({
+    points: points,
+    signature: signature,
+    activeCount: Math.max(1, Math.min(maxEpicycles, fourierX.length)),
+    stamp: now
+  });
+
+  if (parameterSlices.length > maxParameterSlices) {
+    parameterSlices.splice(0, parameterSlices.length - maxParameterSlices);
+  }
+
+  var maxOffset = Math.max(0, parameterSlices.length - timelineVisibleCount);
+  timelineScrollOffset = clamp(timelineScrollOffset, 0, maxOffset);
+
+  lastParameterSignature = signature;
+  lastSliceCaptureMillis = now;
 }
 
 function getPlayTerm(term, index, activeCount) {
@@ -502,7 +578,7 @@ function drawPaneFrames() {
   fill(190, 200, 230, 170);
   textAlign(LEFT, TOP);
   textSize(12);
-  text("Epicycles", layout.left.x + 10, layout.left.y + 8);
+  text(viewMode === "3d" ? "Epicycles • 3D slices" : "Epicycles", layout.left.x + 10, layout.left.y + 8);
   text("Sine + Freq×Amp", layout.right.x + 10, layout.right.y + 8);
 }
 
@@ -771,12 +847,12 @@ function drawSinePanel() {
   noStroke();
   textSize(11);
   if (selectedRingIndices.length > 1) {
-    text((showWaveBreakdown ? "breakdown" : "combined") + " • selected " + selectedRingIndices.length + " terms", plotX + 2, plotY + 4);
+    text("combined • selected " + selectedRingIndices.length + " terms", plotX + 2, plotY + 4);
   } else if (selectedRingIndex >= 0 && selectedRingIndex < terms.length) {
     var st = terms[selectedRingIndex];
-    text((showWaveBreakdown ? "breakdown" : "combined") + " • selected: amp " + nf(st.amp, 1, 2) + " • freq " + nf(st.freq, 1, 2), plotX + 2, plotY + 4);
+    text("combined • selected: amp " + nf(st.amp, 1, 2) + " • freq " + nf(st.freq, 1, 2), plotX + 2, plotY + 4);
   } else {
-    text((showWaveBreakdown ? "breakdown" : "combined") + " • using " + activeCount + " terms", plotX + 2, plotY + 4);
+    text("combined • using " + activeCount + " terms", plotX + 2, plotY + 4);
   }
 
   textAlign(RIGHT, TOP);
@@ -862,6 +938,13 @@ function updateSelectedRingInfo() {
   }
 
   info.textContent = "Selected: none";
+}
+
+function updateViewModeButton() {
+  var viewToggle = document.getElementById("toggle-view-mode");
+  if (!viewToggle) return;
+  viewToggle.textContent = viewMode === "3d" ? "View: 3D" : "View: 2D";
+  viewToggle.classList.toggle("active", viewMode === "3d");
 }
 
 function clamp(v, minV, maxV) {
@@ -975,21 +1058,12 @@ function setup() {
     });
   }
 
-  var waveViewToggle = document.getElementById("toggle-wave-view");
-  if (waveViewToggle) {
-    waveViewToggle.textContent = showWaveBreakdown ? "Show combined" : "Show breakdown";
-    waveViewToggle.addEventListener("click", function () {
-      showWaveBreakdown = !showWaveBreakdown;
-      waveViewToggle.textContent = showWaveBreakdown ? "Show combined" : "Show breakdown";
-    });
-  }
-
-  var clearBarSelectionButton = document.getElementById("clear-bar-selection");
-  if (clearBarSelectionButton) {
-    clearBarSelectionButton.addEventListener("click", function () {
-      clearBarSelection();
-      updateSelectedRingInfo();
-      redraw();
+  var viewModeToggle = document.getElementById("toggle-view-mode");
+  if (viewModeToggle) {
+    updateViewModeButton();
+    viewModeToggle.addEventListener("click", function () {
+      viewMode = viewMode === "3d" ? "2d" : "3d";
+      updateViewModeButton();
     });
   }
 
@@ -1011,6 +1085,10 @@ function loadSelectedDrawing() {
   loading = true;
   loadError = "";
   epicycleTime = 0;
+  parameterSlices = [];
+  lastParameterSignature = "";
+  lastSliceCaptureMillis = 0;
+  timelineScrollOffset = 0;
   resetPlayInteraction();
 
   var cachedData = drawingDataCache[drawingChoice] || loadDrawingDataFromStorage(drawingChoice);
@@ -1043,17 +1121,18 @@ function loadSelectedDrawing() {
   });
 }
 
-function buildEpicycleSegments(activeCount) {
+function buildEpicycleSegments(activeCount, sampleTime) {
   var segments = [];
   var ex = 0;
   var ey = 0;
+  var t = typeof sampleTime === "number" ? sampleTime : epicycleTime;
 
   for (var i = 0; i < activeCount; i++) {
     var prevx = ex;
     var prevy = ey;
     var term = getPlayTerm(fourierX[i], i, activeCount);
-    ex += term.amp * cos(term.freq * epicycleTime + term.phase);
-    ey += term.amp * sin(term.freq * epicycleTime + term.phase);
+    ex += term.amp * cos(term.freq * t + term.phase);
+    ey += term.amp * sin(term.freq * t + term.phase);
 
     segments.push({
       index: i,
@@ -1120,11 +1199,177 @@ function drawEpicycleOverlay() {
   }
 }
 
+function rotate3DPoint(x, y, z) {
+  var cy = Math.cos(view3dYaw);
+  var sy = Math.sin(view3dYaw);
+  var x1 = x * cy + z * sy;
+  var z1 = -x * sy + z * cy;
+
+  var cp = Math.cos(view3dPitch);
+  var sp = Math.sin(view3dPitch);
+  var y2 = y * cp - z1 * sp;
+  var z2 = y * sp + z1 * cp;
+
+  return { x: x1, y: y2, z: z2 };
+}
+
+function project3DVec(panel, x, y, z) {
+  var r = rotate3DPoint(x, y, z);
+  var cx = panel.x + panel.w * 0.42;
+  var cy = panel.y + panel.h * 0.54;
+  var camDist = Math.min(panel.w, panel.h) * 0.95;
+  var denom = camDist + r.z + Math.min(panel.w, panel.h) * 0.3;
+  var perspective = camDist / Math.max(80, denom);
+
+  return {
+    x: cx + r.x * perspective,
+    y: cy + r.y * perspective,
+    depth: r.z,
+    scale: perspective
+  };
+}
+
+function draw3DAxes(panel, axisLenPx) {
+  var origin = project3DVec(panel, 0, 0, 0);
+  var xEnd = project3DVec(panel, axisLenPx, 0, 0);
+  var yEnd = project3DVec(panel, 0, axisLenPx, 0);
+  var zEnd = project3DVec(panel, 0, 0, axisLenPx);
+
+  strokeWeight(1.6);
+  stroke(255, 130, 130, 210);
+  line(origin.x, origin.y, xEnd.x, xEnd.y);
+  stroke(140, 255, 170, 210);
+  line(origin.x, origin.y, yEnd.x, yEnd.y);
+  stroke(130, 180, 255, 210);
+  line(origin.x, origin.y, zEnd.x, zEnd.y);
+
+  noStroke();
+  fill(255, 130, 130, 220);
+  textSize(10);
+  textAlign(LEFT, CENTER);
+  text("X", xEnd.x + 4, xEnd.y);
+  fill(140, 255, 170, 220);
+  text("Y", yEnd.x + 4, yEnd.y);
+  fill(130, 180, 255, 220);
+  text("Z", zEnd.x + 4, zEnd.y);
+}
+
+function drawParameterSlice3DView(panel) {
+  if (!parameterSlices || parameterSlices.length === 0) return;
+
+  var totalSlices = parameterSlices.length;
+  var endIndex = totalSlices - 1 - timelineScrollOffset;
+  endIndex = Math.max(0, Math.min(totalSlices - 1, endIndex));
+  var startIndex = Math.max(0, endIndex - timelineVisibleCount + 1);
+  var visibleSlices = parameterSlices.slice(startIndex, endIndex + 1);
+  if (visibleSlices.length === 0) return;
+
+  var maxAbs = 1;
+  for (var s = 0; s < visibleSlices.length; s++) {
+    var slicePts = visibleSlices[s].points;
+    for (var p = 0; p < slicePts.length; p++) {
+      maxAbs = Math.max(maxAbs, Math.abs(slicePts[p].x), Math.abs(slicePts[p].y));
+    }
+  }
+
+  var xyScale = (Math.min(panel.w, panel.h) * 0.34 / maxAbs) * viewZoom;
+  var depthScale = Math.min(panel.w, panel.h) * 0.62;
+  var railXLeft = panel.x + 18;
+  var railXRight = panel.x + panel.w - 86;
+  var railY = panel.y + panel.h - 76;
+
+  noStroke();
+  fill(14, 18, 30, 165);
+  rect(railXLeft - 10, railY - 14, (railXRight - railXLeft) + 20, 30, 8);
+
+  stroke(130, 180, 255, 215);
+  strokeWeight(2);
+  line(railXLeft, railY, railXRight, railY);
+
+  function railXForIndex(idx) {
+    if (totalSlices <= 1) return (railXLeft + railXRight) * 0.5;
+    return railXLeft + (idx / (totalSlices - 1)) * (railXRight - railXLeft);
+  }
+
+  var visibleStartX = railXForIndex(startIndex);
+  var visibleEndX = railXForIndex(endIndex);
+  stroke(188, 226, 205, 190);
+  strokeWeight(4);
+  line(visibleStartX, railY, visibleEndX, railY);
+
+  noStroke();
+  for (var dot = 0; dot < totalSlices; dot++) {
+    var dotX = railXForIndex(dot);
+    var inVisible = dot >= startIndex && dot <= endIndex;
+    fill(inVisible ? color(164, 198, 236, 190) : color(105, 120, 156, 85));
+    circle(dotX, railY, inVisible ? 3.8 : 2.8);
+  }
+
+  noStroke();
+  fill(130, 180, 255, 220);
+  textSize(10);
+  textAlign(LEFT, TOP);
+  text("timeline", railXLeft, railY - 28);
+  fill(176, 196, 220, 195);
+  textSize(9);
+  text("older", railXLeft, railY + 6);
+  textAlign(RIGHT, TOP);
+  text("newer", railXRight, railY + 6);
+  textAlign(LEFT, TOP);
+
+  for (var i = 0; i < visibleSlices.length; i++) {
+    var slice = visibleSlices[i];
+    var u = visibleSlices.length > 1 ? i / (visibleSlices.length - 1) : 0;
+    var z = (0.5 - u) * depthScale;
+    var absoluteIndex = startIndex + i;
+    var isNewest = absoluteIndex === totalSlices - 1;
+    var alphaBase = 36 + u * 178;
+
+    for (var j = 0; j < slice.points.length; j++) {
+      var a = slice.points[j];
+      var b = slice.points[(j + 1) % slice.points.length];
+      var pa = project3DVec(panel, a.x * xyScale, a.y * xyScale, z);
+      var pb = project3DVec(panel, b.x * xyScale, b.y * xyScale, z);
+      var segBridge = !!(a.bridge || b.bridge);
+      stroke(isNewest ? color(210, 236, 255, segBridge ? alphaBase * 0.32 : 240) : color(170, 198, 235, segBridge ? alphaBase * 0.22 : alphaBase));
+      strokeWeight(isNewest ? (segBridge ? 1.1 : 1.9) : (segBridge ? 0.7 : 1.1));
+      line(pa.x, pa.y, pb.x, pb.y);
+    }
+
+    var markerX = railXForIndex(absoluteIndex);
+    noStroke();
+    fill(isNewest ? color(206, 234, 216, 238) : color(158, 189, 227, 170));
+    circle(markerX, railY, isNewest ? 7 : 4.5);
+  }
+
+  var currentX = railXForIndex(totalSlices - 1);
+  stroke(206, 234, 216, 240);
+  strokeWeight(1.5);
+  line(currentX, railY - 8, currentX, railY + 8);
+
+  var newest = visibleSlices[visibleSlices.length - 1];
+  if (newest && newest.points.length > 0) {
+    var tipPt = newest.points[newest.points.length - 1];
+    var tip = project3DVec(panel, tipPt.x * xyScale, tipPt.y * xyScale, -depthScale * 0.5);
+    noStroke();
+    fill(196, 232, 208, 240);
+    circle(tip.x, tip.y, 7);
+  }
+
+  fill(188, 202, 224, 190);
+  textSize(10);
+  textAlign(LEFT, TOP);
+  text("Each slice = 2D epicycle drawing at a parameter state • drag to rotate • wheel to scroll timeline", panel.x + 10, panel.y + panel.h - 18);
+  text("showing " + (startIndex + 1) + "–" + (endIndex + 1) + " of " + totalSlices + " changes", panel.x + 10, panel.y + panel.h - 32);
+}
+
 function draw() {
   background(0);
 
   if (isDraggingDivider || isNearDivider(mouseX, mouseY)) {
     cursor("ew-resize");
+  } else if (isDragging3DRotate) {
+    cursor("grab");
   } else if (isDraggingPhaseWheel || isInPhaseWheel(mouseX, mouseY)) {
     cursor(HAND);
   } else if (isDraggingBarAmplitude || hoveredBarIndex >= 0) {
@@ -1152,29 +1397,35 @@ function draw() {
     return;
   }
 
+  captureParameterSlice(false);
+
   drawPaneFrames();
 
   var layout = getPaneLayout();
   clipRect(layout.left.x, layout.left.y, layout.left.w, layout.left.h);
 
-  noFill();
-  for (var i = 0; i < reconstructedPath.length; i++) {
-    var a = reconstructedPath[i];
-    var b = reconstructedPath[(i + 1) % reconstructedPath.length];
-    var sa = worldToScreen(a.x, a.y);
-    var sb = worldToScreen(b.x, b.y);
-    var isBridge = a.bridge || b.bridge;
-    if (isBridge) {
-      stroke(170, 200, 255, 32);
-      strokeWeight(1);
-    } else {
-      stroke(220, 130, 190, 220);
-      strokeWeight(2);
+  if (viewMode === "3d") {
+    drawParameterSlice3DView(layout.left);
+  } else {
+    noFill();
+    for (var i = 0; i < reconstructedPath.length; i++) {
+      var a = reconstructedPath[i];
+      var b = reconstructedPath[(i + 1) % reconstructedPath.length];
+      var sa = worldToScreen(a.x, a.y);
+      var sb = worldToScreen(b.x, b.y);
+      var isBridge = a.bridge || b.bridge;
+      if (isBridge) {
+        stroke(170, 200, 255, 32);
+        strokeWeight(1);
+      } else {
+        stroke(220, 130, 190, 220);
+        strokeWeight(2);
+      }
+      line(sa.x, sa.y, sb.x, sb.y);
     }
-    line(sa.x, sa.y, sb.x, sb.y);
-  }
 
-  drawEpicycleOverlay();
+    drawEpicycleOverlay();
+  }
   unclipRect();
   drawSinePanel();
 
@@ -1196,7 +1447,10 @@ function draw() {
     : selectedRingIndex >= 0
     ? "Drag up/down to change selected ring amplitude"
     : "Drag up/down to change global amplitudes";
-  text(ampText, layout.left.x + 10, layout.left.y + layout.left.h - 14);
+  var ampTextY = viewMode === "3d"
+    ? layout.left.y + layout.left.h - 48
+    : layout.left.y + layout.left.h - 14;
+  text(ampText, layout.left.x + 10, ampTextY);
   updateSelectedRingInfo();
 
   var dt = TWO_PI / Math.max(1, fourierX.length);
@@ -1206,6 +1460,13 @@ function draw() {
 function mousePressed(mouseEvent) {
   if (isNearDivider(mouseX, mouseY)) {
     isDraggingDivider = true;
+    return;
+  }
+
+  if (viewMode === "3d" && inLeftPane(mouseX, mouseY) && !isInPhaseWheel(mouseX, mouseY)) {
+    isDragging3DRotate = true;
+    last3DMouseX = mouseX;
+    last3DMouseY = mouseY;
     return;
   }
 
@@ -1270,6 +1531,16 @@ function mousePressed(mouseEvent) {
 function mouseDragged() {
   if (isDraggingDivider) {
     updatePaneRatioFromMouse(mouseX);
+    return;
+  }
+
+  if (isDragging3DRotate) {
+    var rotDx = mouseX - last3DMouseX;
+    var rotDy = mouseY - last3DMouseY;
+    last3DMouseX = mouseX;
+    last3DMouseY = mouseY;
+    view3dYaw += rotDx * 0.01;
+    view3dPitch = clamp(view3dPitch + rotDy * 0.01, -1.25, 1.25);
     return;
   }
 
@@ -1366,6 +1637,7 @@ function mouseDragged() {
 
 function mouseReleased() {
   isDraggingDivider = false;
+  isDragging3DRotate = false;
   isDraggingAmplitude = false;
   isDraggingBarAmplitude = false;
   isDraggingPhaseWheel = false;
@@ -1379,7 +1651,16 @@ function mouseReleased() {
 }
 
 function mouseWheel(event) {
+  if (viewMode === "3d") {
+    if (!inLeftPane(mouseX, mouseY)) return false;
+    var maxOffset = Math.max(0, parameterSlices.length - timelineVisibleCount);
+    var scrollStep = Math.max(1, Math.round(Math.abs(event.delta) / 80));
+    timelineScrollOffset = clamp(timelineScrollOffset + (event.delta > 0 ? scrollStep : -scrollStep), 0, maxOffset);
+    return false;
+  }
+
   if (!inLeftPane(mouseX, mouseY)) return false;
+
   var delta = event.delta > 0 ? -0.08 : 0.08;
   viewZoom = clamp(viewZoom + delta, 0.5, 4);
   return false;
