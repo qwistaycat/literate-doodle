@@ -50,6 +50,8 @@ var pendingBarTermIndex = -1;
 var pendingBarStartX = 0;
 var pendingBarStartY = 0;
 var pendingBarGestureMode = "";
+var sinePlotBounds = null;
+var isScrubbingSine = false;
 
 function isRingSelected(index) {
   return selectedRingIndices.indexOf(index) >= 0;
@@ -96,6 +98,24 @@ function getSelectedTargets() {
 function isMultiSelectEvent(mouseEvent) {
   if (!mouseEvent) return false;
   return !!(mouseEvent.shiftKey || mouseEvent.metaKey || mouseEvent.ctrlKey);
+}
+
+function isInSinePlot(sx, sy) {
+  if (!sinePlotBounds) return false;
+  return sx >= sinePlotBounds.x && sx <= sinePlotBounds.x + sinePlotBounds.w && sy >= sinePlotBounds.y && sy <= sinePlotBounds.y + sinePlotBounds.h;
+}
+
+function setEpicycleTimeFromSineX(sx) {
+  if (!sinePlotBounds || sinePlotBounds.w <= 1) return;
+  var u = clamp((sx - sinePlotBounds.x) / sinePlotBounds.w, 0, 1);
+  if (reconstructedPath && reconstructedPath.length > 1) {
+    var sampleCount = reconstructedPath.length;
+    var sampleIndex = Math.round(u * (sampleCount - 1));
+    epicycleTime = (sampleIndex / sampleCount) * TWO_PI;
+  } else {
+    epicycleTime = u * TWO_PI;
+  }
+  epicycleTime = normalizeAngle0ToTwoPi(epicycleTime);
 }
 
 function clearBarSelection() {
@@ -605,6 +625,7 @@ function drawSinePanel() {
   var plotY = headerY;
   var plotH = Math.min(sineH, panel.h - 86);
   var yMid = plotY + plotH / 2;
+  sinePlotBounds = { x: plotX, y: plotY, w: plotW, h: plotH };
   var barGap = 12;
   var barX = plotX;
   var barY = plotY + plotH + barGap;
@@ -1165,6 +1186,7 @@ function drawEpicycleOverlay() {
   if (showEpicycles) {
     for (var i = 0; i < segments.length; i++) {
       var seg = segments[i];
+      var phaseHue = normalizeAngle0ToTwoPi(termPhaseOffsets[seg.index] || 0) * 180 / PI;
       var circlePos = worldToScreen(seg.fromX, seg.fromY);
       var endpoint = worldToScreen(seg.toX, seg.toY);
       var displayRadius = seg.amp < 1.25 ? 1.25 : seg.amp;
@@ -1174,20 +1196,28 @@ function drawEpicycleOverlay() {
       var circleAlpha = seg.amp < 2 ? 210 : (seg.amp < 6 ? 150 : 90);
       var circleWeight = seg.amp < 2 ? 1.6 : (seg.amp < 6 ? 1.2 : 1.0);
 
+      colorMode(HSB, 360, 100, 100, 255);
       if (isHover) {
-        stroke(120, 220, 255, 230);
-        strokeWeight(2.2);
+        stroke(phaseHue, 92, 100, 248);
+        strokeWeight(2.4);
       } else if (isSelected) {
-        stroke(255, 190, 90, 230);
+        stroke(phaseHue, 86, 100, 236);
         strokeWeight(2.2);
       } else {
-        stroke(255, circleAlpha);
+        stroke(phaseHue, 76, 92, circleAlpha);
         strokeWeight(circleWeight);
       }
       noFill();
       ellipse(circlePos.x, circlePos.y, displayRadiusScreen * 2);
 
-      stroke(isHover ? color(120, 220, 255, 210) : (isSelected ? color(255, 190, 90, 210) : color(255, 170)));
+      if (isHover) {
+        stroke(phaseHue, 90, 100, 235);
+      } else if (isSelected) {
+        stroke(phaseHue, 84, 100, 220);
+      } else {
+        stroke(phaseHue, 70, 95, 170);
+      }
+      colorMode(RGB, 255, 255, 255, 255);
       strokeWeight(1);
       line(circlePos.x, circlePos.y, endpoint.x, endpoint.y);
     }
@@ -1197,6 +1227,52 @@ function drawEpicycleOverlay() {
     noStroke();
     circle(tip.x, tip.y, 4);
   }
+}
+
+function getEpicycleTipAtTime(activeCount, t) {
+  var ex = 0;
+  var ey = 0;
+  for (var i = 0; i < activeCount; i++) {
+    var term = getPlayTerm(fourierX[i], i, activeCount);
+    ex += term.amp * cos(term.freq * t + term.phase);
+    ey += term.amp * sin(term.freq * t + term.phase);
+  }
+  return { x: ex, y: ey };
+}
+
+function drawRecentTraceOverlay() {
+  if (!fourierX || fourierX.length === 0) return;
+
+  var activeCount = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  var tailSamples = Math.max(14, Math.min(70, Math.floor(fourierX.length * 0.085)));
+  var dt = TWO_PI / Math.max(1, fourierX.length);
+  var timeNow = normalizeAngle0ToTwoPi(epicycleTime);
+
+  noFill();
+  for (var step = tailSamples; step > 0; step--) {
+    var tA = normalizeAngle0ToTwoPi(timeNow - step * dt);
+    var tB = normalizeAngle0ToTwoPi(timeNow - (step - 1) * dt);
+    var a = getEpicycleTipAtTime(activeCount, tA);
+    var b = getEpicycleTipAtTime(activeCount, tB);
+    var sa = worldToScreen(a.x, a.y);
+    var sb = worldToScreen(b.x, b.y);
+    var k = 1 - (step / tailSamples);
+
+    stroke(184, 232, 206, 28 + k * 150);
+    strokeWeight(1.2 + k * 3.1);
+    line(sa.x, sa.y, sb.x, sb.y);
+  }
+
+  var tip = getEpicycleTipAtTime(activeCount, timeNow);
+  var tipScreen = worldToScreen(tip.x, tip.y);
+
+  noStroke();
+  fill(184, 232, 206, 62);
+  circle(tipScreen.x, tipScreen.y, 18);
+  fill(204, 246, 220, 188);
+  circle(tipScreen.x, tipScreen.y, 8);
+  fill(232, 255, 241, 245);
+  circle(tipScreen.x, tipScreen.y, 4);
 }
 
 function rotate3DPoint(x, y, z) {
@@ -1368,6 +1444,8 @@ function draw() {
 
   if (isDraggingDivider || isNearDivider(mouseX, mouseY)) {
     cursor("ew-resize");
+  } else if (isScrubbingSine || isInSinePlot(mouseX, mouseY)) {
+    cursor("ew-resize");
   } else if (isDragging3DRotate) {
     cursor("grab");
   } else if (isDraggingPhaseWheel || isInPhaseWheel(mouseX, mouseY)) {
@@ -1425,6 +1503,7 @@ function draw() {
     }
 
     drawEpicycleOverlay();
+    drawRecentTraceOverlay();
   }
   unclipRect();
   drawSinePanel();
@@ -1454,7 +1533,9 @@ function draw() {
   updateSelectedRingInfo();
 
   var dt = TWO_PI / Math.max(1, fourierX.length);
-  epicycleTime = normalizeAngle0ToTwoPi(epicycleTime + dt);
+  if (!isScrubbingSine) {
+    epicycleTime = normalizeAngle0ToTwoPi(epicycleTime + dt);
+  }
 }
 
 function mousePressed(mouseEvent) {
@@ -1473,6 +1554,12 @@ function mousePressed(mouseEvent) {
   if (isInPhaseWheel(mouseX, mouseY)) {
     isDraggingPhaseWheel = true;
     applyPhaseFromMouse(mouseX, mouseY);
+    return;
+  }
+
+  if (isInSinePlot(mouseX, mouseY)) {
+    isScrubbingSine = true;
+    setEpicycleTimeFromSineX(mouseX);
     return;
   }
 
@@ -1531,6 +1618,11 @@ function mousePressed(mouseEvent) {
 function mouseDragged() {
   if (isDraggingDivider) {
     updatePaneRatioFromMouse(mouseX);
+    return;
+  }
+
+  if (isScrubbingSine) {
+    setEpicycleTimeFromSineX(mouseX);
     return;
   }
 
@@ -1637,6 +1729,7 @@ function mouseDragged() {
 
 function mouseReleased() {
   isDraggingDivider = false;
+  isScrubbingSine = false;
   isDragging3DRotate = false;
   isDraggingAmplitude = false;
   isDraggingBarAmplitude = false;
