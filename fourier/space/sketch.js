@@ -30,6 +30,7 @@ var isDraggingBarAmplitude = false;
 var phaseWheelGeom = null;
 var isDraggingPhaseWheel = false;
 var showWaveBreakdown = false;
+var revealPathOverTime = false;
 var viewMode = "2d";
 var view3dYaw = -0.7;
 var view3dPitch = 0.45;
@@ -968,6 +969,13 @@ function updateViewModeButton() {
   viewToggle.classList.toggle("active", viewMode === "3d");
 }
 
+function updatePathModeButton() {
+  var pathToggle = document.getElementById("toggle-path-mode");
+  if (!pathToggle) return;
+  pathToggle.textContent = revealPathOverTime ? "Path: Reveal" : "Path: Full";
+  pathToggle.classList.toggle("active", revealPathOverTime);
+}
+
 function clamp(v, minV, maxV) {
   return Math.max(minV, Math.min(maxV, v));
 }
@@ -1085,6 +1093,15 @@ function setup() {
     viewModeToggle.addEventListener("click", function () {
       viewMode = viewMode === "3d" ? "2d" : "3d";
       updateViewModeButton();
+    });
+  }
+
+  var pathModeToggle = document.getElementById("toggle-path-mode");
+  if (pathModeToggle) {
+    updatePathModeButton();
+    pathModeToggle.addEventListener("click", function () {
+      revealPathOverTime = !revealPathOverTime;
+      updatePathModeButton();
     });
   }
 
@@ -1486,7 +1503,14 @@ function draw() {
     drawParameterSlice3DView(layout.left);
   } else {
     noFill();
-    for (var i = 0; i < reconstructedPath.length; i++) {
+    var pathLen = reconstructedPath.length;
+    var drawSegCount = pathLen;
+    if (revealPathOverTime && pathLen > 1) {
+      var currentPathIndex = Math.floor((normalizeAngle0ToTwoPi(epicycleTime) / TWO_PI) * pathLen) % pathLen;
+      drawSegCount = Math.max(0, currentPathIndex);
+    }
+
+    for (var i = 0; i < drawSegCount; i++) {
       var a = reconstructedPath[i];
       var b = reconstructedPath[(i + 1) % reconstructedPath.length];
       var sa = worldToScreen(a.x, a.y);
@@ -1526,10 +1550,9 @@ function draw() {
     : selectedRingIndex >= 0
     ? "Drag up/down to change selected ring amplitude"
     : "Drag up/down to change global amplitudes";
-  var ampTextY = viewMode === "3d"
-    ? layout.left.y + layout.left.h - 48
-    : layout.left.y + layout.left.h - 14;
-  text(ampText, layout.left.x + 10, ampTextY);
+  if (viewMode !== "3d") {
+    text(ampText, layout.left.x + 10, layout.left.y + layout.left.h - 14);
+  }
   updateSelectedRingInfo();
 
   var dt = TWO_PI / Math.max(1, fourierX.length);
