@@ -177,14 +177,14 @@ var extraNamedDrawingCache = {
 };
 
 function getNamedDrawingPaths(selection) {
-  if (selection === "heated") return ["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg", "../../images/4.vpype/heatedvpype.svg", "/images/4.vpype/heatedvpype.svg"];
-  if (selection === "pom") return ["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg", "../../images/4.vpype/pomvpype.svg", "/images/4.vpype/pomvpype.svg"];
-  if (selection === "blackberry") return ["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg", "../../images/4.vpype/blackberryvpype.svg", "/images/4.vpype/blackberryvpype.svg"];
-  if (selection === "kris") return ["../krisvpype.svg", "krisvpype.svg", "../images/4.vpype/krisvpype.svg", "../../images/4.vpype/krisvpype.svg", "/images/4.vpype/krisvpype.svg"];
-  if (selection === "laoganma") return ["../laoganmavpype.svg", "laoganmavpype.svg", "../images/4.vpype/laoganmavpype.svg", "../../images/4.vpype/laoganmavpype.svg", "/images/4.vpype/laoganmavpype.svg"];
-  if (selection === "loopy") return ["../loopyvpype.svg", "loopyvpype.svg", "../images/4.vpype/loopyvpype.svg", "../../images/4.vpype/loopyvpype.svg", "/images/4.vpype/loopyvpype.svg"];
-  if (selection === "star") return ["../starvpype.svg", "starvpype.svg", "../images/4.vpype/starvpype.svg", "../../images/4.vpype/starvpype.svg", "/images/4.vpype/starvpype.svg"];
-  if (selection === "yu") return ["../yu-vpype.svg", "yu-vpype.svg", "./space/yu-vpype.svg", "../space/yu-vpype.svg", "../yu-vpype-smooth.svg", "yu-vpype-smooth.svg", "./space/yu-vpype-smooth.svg", "../space/yu-vpype-smooth.svg", "../images/4.vpype/yu-vpype.svg", "../../images/4.vpype/yu-vpype.svg", "/images/4.vpype/yu-vpype.svg", "../images/4.vpype/yu-vpype-smooth.svg", "../../images/4.vpype/yu-vpype-smooth.svg", "/images/4.vpype/yu-vpype-smooth.svg"];
+  if (selection === "heated") return ["images/4.vpypy/heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg", "../../images/4.vpype/heatedvpype.svg", "/images/4.vpype/heatedvpype.svg"];
+  if (selection === "pom") return ["images/4.vpypy/pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg", "../../images/4.vpype/pomvpype.svg", "/images/4.vpype/pomvpype.svg"];
+  if (selection === "blackberry") return ["images/4.vpypy/blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg", "../../images/4.vpype/blackberryvpype.svg", "/images/4.vpype/blackberryvpype.svg"];
+  if (selection === "kris") return ["images/4.vpypy/krisvpype.svg", "krisvpype.svg", "../images/4.vpype/krisvpype.svg", "../../images/4.vpype/krisvpype.svg", "/images/4.vpype/krisvpype.svg"];
+  if (selection === "laoganma") return ["images/4.vpypy/laoganmavpype.svg", "laoganmavpype.svg", "../images/4.vpype/laoganmavpype.svg", "../../images/4.vpype/laoganmavpype.svg", "/images/4.vpype/laoganmavpype.svg"];
+  if (selection === "loopy") return ["images/4.vpypy/loopyvpype.svg", "loopyvpype.svg", "../images/4.vpype/loopyvpype.svg", "../../images/4.vpype/loopyvpype.svg", "/images/4.vpype/loopyvpype.svg"];
+  if (selection === "star") return ["images/4.vpypy/starvpype.svg", "starvpype.svg", "../images/4.vpype/starvpype.svg", "../../images/4.vpype/starvpype.svg", "/images/4.vpype/starvpype.svg"];
+  if (selection === "yu") return ["images/4.vpypy/yu-vpype.svg", "yu-vpype.svg", "./space/yu-vpype.svg", "../space/yu-vpype.svg", "../yu-vpype-smooth.svg", "yu-vpype-smooth.svg", "./space/yu-vpype-smooth.svg", "../space/yu-vpype-smooth.svg", "../images/4.vpype/yu-vpype.svg", "../../images/4.vpype/yu-vpype.svg", "/images/4.vpype/yu-vpype.svg", "../images/4.vpype/yu-vpype-smooth.svg", "../../images/4.vpype/yu-vpype-smooth.svg", "/images/4.vpype/yu-vpype-smooth.svg"];
   return null;
 }
 
