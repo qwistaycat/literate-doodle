@@ -212,9 +212,9 @@ function ensureNamedDrawingsLoaded(done) {
     return;
   }
 
-  var heatedPaths = ["../heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"];
-  var pomPaths = ["../pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"];
-  var blackberryPaths = ["../blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"];
+  var heatedPaths = ["images/4.vpype/heatedvpype.svg", "heatedvpype.svg", "../images/4.vpype/heatedvpype.svg"];
+  var pomPaths = ["images/4.vpype/pomvpype.svg", "pomvpype.svg", "../images/4.vpype/pomvpype.svg"];
+  var blackberryPaths = ["images/4.vpype/blackberryvpype.svg", "blackberryvpype.svg", "../images/4.vpype/blackberryvpype.svg"];
 
   fetchFirstAvailableSVG(heatedPaths, function (err, points) {
     if (!err && points.length > 0 && typeof drawingHeated !== "undefined") {
