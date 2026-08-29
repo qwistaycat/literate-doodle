@@ -53,6 +53,7 @@ var pendingBarStartY = 0;
 var pendingBarGestureMode = "";
 var sinePlotBounds = null;
 var isScrubbingSine = false;
+var pointerOverMediumLink = false;
 
 function isRingSelected(index) {
   return selectedRingIndices.indexOf(index) >= 0;
@@ -102,6 +103,7 @@ function isMultiSelectEvent(mouseEvent) {
 }
 
 function isInSinePlot(sx, sy) {
+  if (pointerOverMediumLink) return false;
   if (!sinePlotBounds) return false;
   return sx >= sinePlotBounds.x && sx <= sinePlotBounds.x + sinePlotBounds.w && sy >= sinePlotBounds.y && sy <= sinePlotBounds.y + sinePlotBounds.h;
 }
@@ -393,6 +395,7 @@ function getPhaseWheelGeometry(panel) {
 }
 
 function isInPhaseWheel(sx, sy) {
+  if (pointerOverMediumLink) return false;
   if (!phaseWheelGeom || selectedRingIndex < 0) return false;
   var dx = sx - phaseWheelGeom.cx;
   var dy = sy - phaseWheelGeom.cy;
@@ -514,11 +517,13 @@ function getPaneLayout() {
 }
 
 function inLeftPane(sx, sy) {
+  if (pointerOverMediumLink) return false;
   var layout = getPaneLayout();
   return sx >= layout.left.x && sx <= layout.left.x + layout.left.w && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
 }
 
 function findBarAt(sx, sy) {
+  if (pointerOverMediumLink) return -1;
   if (!barChartItems || barChartItems.length === 0) return -1;
   for (var i = 0; i < barChartItems.length; i++) {
     var bar = barChartItems[i];
@@ -534,6 +539,7 @@ function dividerXFromLayout(layout) {
 }
 
 function isNearDivider(sx, sy) {
+  if (pointerOverMediumLink) return false;
   var layout = getPaneLayout();
   var dividerX = dividerXFromLayout(layout);
   return Math.abs(sx - dividerX) <= 10 && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
@@ -1112,6 +1118,8 @@ function setup() {
     });
   }
 
+  setupMediumLink();
+
   loadSelectedDrawing();
 }
 
@@ -1562,6 +1570,7 @@ function draw() {
 }
 
 function mousePressed(mouseEvent) {
+  if (pointerOverMediumLink) return;
   if (isNearDivider(mouseX, mouseY)) {
     isDraggingDivider = true;
     return;
@@ -1767,6 +1776,7 @@ function mouseReleased() {
 }
 
 function mouseWheel(event) {
+  if (pointerOverMediumLink) return;
   if (viewMode === "3d") {
     if (!inLeftPane(mouseX, mouseY)) return false;
     var maxOffset = Math.max(0, parameterSlices.length - timelineVisibleCount);
@@ -1780,4 +1790,32 @@ function mouseWheel(event) {
   var delta = event.delta > 0 ? -0.08 : 0.08;
   viewZoom = clamp(viewZoom + delta, 0.5, 4);
   return false;
+}
+
+function isCanvasGestureActive() {
+  return isDraggingDivider ||
+    isDraggingAmplitude ||
+    isDraggingBarAmplitude ||
+    isDraggingPhaseWheel ||
+    isDragging3DRotate ||
+    isScrubbingSine ||
+    isBrushingBarSelection ||
+    pendingBarGesture;
+}
+
+function setupMediumLink() {
+  var link = document.getElementById("medium-link");
+  if (!link) return;
+
+  // p5 binds mouse events to the window, so the canvas would otherwise react to
+  // clicks that land on this button. Suppress that while the pointer is over it,
+  // but never mid-gesture -- a drag started on a bar must survive passing over.
+  function markOver() {
+    if (!isCanvasGestureActive()) pointerOverMediumLink = true;
+  }
+  link.addEventListener("mouseenter", markOver);
+  link.addEventListener("mousemove", markOver);
+  link.addEventListener("mouseleave", function () {
+    pointerOverMediumLink = false;
+  });
 }

@@ -160,3 +160,48 @@ canvas {
 }
 
 
+
+/* ---- "Read the write-up" corner button ---- */
+
+#medium-link {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  background: rgba(14, 11, 20, 0.93);
+  border: 1px solid #6a8f77;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color: #d9f2de;
+  font-family: sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#medium-link:hover {
+  background: rgba(129, 176, 147, 0.28);
+  border-color: #a3ccb2;
+}
+
+#medium-link .medium-glyph {
+  font-size: 15px;
+  line-height: 1;
+  color: #c7a9ee;
+}
+
+#medium-link .medium-arrow {
+  color: #9ec4ab;
+}
+
+@media (max-width: 620px) {
+  #medium-link {
+    font-size: 11px;
+    padding: 7px 11px;
+  }
+}
