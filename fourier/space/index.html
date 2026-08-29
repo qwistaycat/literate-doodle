@@ -2,7 +2,7 @@
 <html>
   <head>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.2.0/p5.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css?v=20260828c">
+    <link rel="stylesheet" type="text/css" href="style.css?v=20260829a">
     <meta charset="utf-8" />
   </head>
   <body>
@@ -29,6 +29,9 @@
       <span class="medium-arrow">&#8594;</span>
     </a>
 
+    <!-- Load-time attract loop: dims the page and pulses the Tutorial button. -->
+    <div id="intro-highlight" aria-hidden="true"></div>
+
     <div id="tutorial" aria-hidden="true">
       <div id="tutorial-spotlight"></div>
       <div id="tutorial-popup" role="dialog" aria-labelledby="tutorial-title" aria-describedby="tutorial-body">
@@ -37,6 +40,24 @@
           <h3 id="tutorial-title">&nbsp;</h3>
         </div>
         <p id="tutorial-body">&nbsp;</p>
+
+        <!-- Looping hand animation miming the gesture for the current step. -->
+        <div id="tutorial-gesture" class="tutorial-gesture" data-gesture="tap">
+          <span class="gesture-stage" aria-hidden="true">
+            <span class="gesture-track"></span>
+            <span class="gesture-arrow gesture-arrow-up"></span>
+            <span class="gesture-arrow gesture-arrow-down"></span>
+            <span class="gesture-hand">
+              <span class="gesture-dot"></span>
+              <svg viewBox="0 0 26 34" focusable="false">
+                <rect x="4.5" y="3.6" width="5" height="14" rx="2.5" />
+                <path d="M4.5 14.8h9.1c4.1 0 7.4 3.3 7.4 7.4v1.9c0 4.3-3.5 7.9-7.9 7.9h-2.7c-2.2 0-4.3-.9-5.8-2.5l-4.3-4.6c-1-1.1-1-2.8.1-3.8 1-1 2.7-1 3.7.1l1.4 1.5V14.8z" />
+              </svg>
+            </span>
+          </span>
+          <span id="tutorial-gesture-label" class="gesture-label"></span>
+        </div>
+
         <div class="tutorial-foot">
           <button id="tutorial-skip" type="button" class="tutorial-skip">Skip tutorial</button>
           <span id="tutorial-dots" class="tutorial-dots"></span>
@@ -51,7 +72,7 @@
     <script src="ct.js?v=20260407"></script>
     <script src="svg-parser.js?v=20260407"></script>
     <script src="fourier-core.js?v=20260508"></script>
-    <script src="sketch.js?v=20260828c"></script>
-    <script src="tutorial.js?v=20260828c"></script>
+    <script src="sketch.js?v=20260829a"></script>
+    <script src="tutorial.js?v=20260829a"></script>
   </body>
 </html>

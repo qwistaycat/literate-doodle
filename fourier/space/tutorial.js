@@ -3,40 +3,50 @@
 // Each step highlights either a DOM control (by selector) or a region the sketch
 // draws itself (by name, resolved through getTutorialTargetRect). The spotlight
 // tracks its target every frame so it stays aligned when the pane divider moves
-// or the window resizes.
-
-var TUTORIAL_SEEN_STORAGE_KEY = "spaceTutorialSeen_v1";
+// or the window resizes. Every step also mimes its gesture with a looping hand.
 
 var TUTORIAL_STEPS = [
   {
     title: "Pick a drawing, pick a depth",
     body: "Choose an image, then set how many Fourier terms get summed. Low counts give a blurry silhouette; each extra term adds finer detail.",
     selectors: ["#drawing-select", "#epicycle-slider", "#epicycle-slider-value"],
-    placement: "below"
+    placement: "below",
+    gestures: [{ type: "drag-x", label: "Drag the slider to add or drop terms" }]
   },
   {
     title: "The epicycle chain",
     body: "Every circle is one term of the sum, drawn tip-to-tail. The end of the last arm traces the picture. Scroll to zoom, and drag up or down on empty space to nudge every amplitude at once.",
     region: "epicycleCanvas",
-    placement: "right"
+    placement: "right",
+    gestures: [
+      { type: "scroll", label: "Scroll to zoom in and out" },
+      { type: "drag-y", label: "Drag up or down to resize every arm" }
+    ]
   },
   {
     title: "The same drawing, as a wave",
     body: "The right panel shows those terms summed into one signal over a full loop. Drag left and right across it to scrub through time by hand.",
     region: "sinePlot",
-    placement: "below"
+    placement: "below",
+    gestures: [{ type: "drag-x", label: "Swipe across to scrub through time" }]
   },
   {
     title: "The frequency spectrum",
     body: "One bar per term, tallest first. Click a bar to select that ring. Drag horizontally to select a range of them, or vertically to push their amplitudes up and down and watch the drawing distort.",
     region: "barChart",
-    placement: "above"
+    placement: "above",
+    gestures: [
+      { type: "tap", label: "Tap a bar to select that ring" },
+      { type: "drag-x", label: "Drag sideways to select a range" },
+      { type: "drag-y", label: "Drag up or down to reshape them" }
+    ]
   },
   {
     title: "Shift the phase",
     body: "With a ring selected, this wheel sets where that circle starts its rotation. Drag around it to rotate that one frequency out of step with the rest.",
     region: "phaseWheel",
     placement: "left",
+    gestures: [{ type: "rotate", label: "Drag around the wheel to shift phase" }],
     onEnter: function () {
       if (typeof tutorialSelectSampleRing === "function") tutorialSelectSampleRing();
     }
@@ -45,42 +55,38 @@ var TUTORIAL_STEPS = [
     title: "Change the view",
     body: "Flip to a 3D stack of parameter slices, reveal the path progressively instead of all at once, or hide the circles to see the line art on its own.",
     selectors: ["#toggle-view-mode", "#toggle-path-mode", "#toggle-epicycles"],
-    placement: "below"
+    placement: "below",
+    gestures: [{ type: "tap", label: "Tap to switch how it is drawn" }]
   },
   {
     title: "Start over any time",
     body: "Reset Changes puts every amplitude and phase back where it started, so experiment freely.",
     selectors: ["#reset-play"],
-    placement: "below"
+    placement: "below",
+    gestures: [{ type: "tap", label: "Tap to undo every edit" }]
   },
   {
     title: "How it all works",
     body: "The full write-up covers the edge detection, skeleton tracing, and the transform behind all of this.",
     selectors: ["#medium-link"],
-    placement: "above"
+    placement: "above",
+    gestures: [{ type: "tap", label: "Tap to open the write-up" }]
   }
 ];
+
+// How long each hand animation holds before a multi-gesture step shows the next one.
+var GESTURE_CYCLE_MS = 3400;
+
+// How long the page stays dimmed around the Tutorial button on load.
+var INTRO_HOLD_MS = 3200;
 
 var tutorialIndex = -1;
 var tutorialActive = false;
 var tutorialFrame = 0;
 var tutorialEls = null;
-
-function tutorialHasBeenSeen() {
-  try {
-    return localStorage.getItem(TUTORIAL_SEEN_STORAGE_KEY) === "1";
-  } catch (e) {
-    return false;
-  }
-}
-
-function markTutorialSeen() {
-  try {
-    localStorage.setItem(TUTORIAL_SEEN_STORAGE_KEY, "1");
-  } catch (e) {
-    // storage unavailable (private mode); the tour still runs, it just won't be remembered
-  }
-}
+var gestureList = null;
+var gestureCursor = 0;
+var gestureTimer = 0;
 
 function unionRect(rects) {
   var usable = rects.filter(function (r) {
@@ -172,6 +178,35 @@ function syncTutorialPosition() {
   tutorialFrame = window.requestAnimationFrame(syncTutorialPosition);
 }
 
+function applyGesture() {
+  var gesture = gestureList[gestureCursor];
+  // The data attribute picks which keyframes run, so setting it restarts the loop.
+  tutorialEls.gesture.setAttribute("data-gesture", gesture.type);
+  tutorialEls.gestureLabel.textContent = gesture.label;
+}
+
+// A step can mime more than one gesture; those take turns while the step is up.
+function setStepGestures(gestures) {
+  window.clearInterval(gestureTimer);
+
+  if (!gestures || gestures.length === 0) {
+    tutorialEls.gesture.hidden = true;
+    return;
+  }
+
+  tutorialEls.gesture.hidden = false;
+  gestureList = gestures;
+  gestureCursor = 0;
+  applyGesture();
+
+  if (gestures.length > 1) {
+    gestureTimer = window.setInterval(function () {
+      gestureCursor = (gestureCursor + 1) % gestureList.length;
+      applyGesture();
+    }, GESTURE_CYCLE_MS);
+  }
+}
+
 function showTutorialStep(index) {
   if (index < 0 || index >= TUTORIAL_STEPS.length) {
     endTutorial();
@@ -187,6 +222,7 @@ function showTutorialStep(index) {
   tutorialEls.counter.textContent = index + 1 + " / " + TUTORIAL_STEPS.length;
   tutorialEls.back.disabled = index === 0;
   tutorialEls.next.textContent = index === TUTORIAL_STEPS.length - 1 ? "Done" : "Next";
+  setStepGestures(step.gestures);
 
   tutorialEls.dots.innerHTML = "";
   for (var d = 0; d < TUTORIAL_STEPS.length; d++) {
@@ -212,11 +248,51 @@ function endTutorial() {
   tutorialActive = false;
   tutorialIndex = -1;
   window.cancelAnimationFrame(tutorialFrame);
+  window.clearInterval(gestureTimer);
   if (!tutorialEls) return;
   tutorialEls.root.classList.remove("is-active");
   tutorialEls.root.setAttribute("aria-hidden", "true");
   if (typeof pointerOverOverlayUI !== "undefined") pointerOverOverlayUI = false;
-  markTutorialSeen();
+}
+
+// On load, dim the page down to the Tutorial button and pulse it, so the tour is
+// offered rather than forced. Any click or keypress dismisses it early.
+function playTutorialIntro() {
+  var ring = document.getElementById("intro-highlight");
+  var button = document.getElementById("start-tutorial");
+  if (!ring || !button) return;
+
+  function position() {
+    var r = button.getBoundingClientRect();
+    var pad = 6;
+    ring.style.left = Math.round(r.left - pad) + "px";
+    ring.style.top = Math.round(r.top - pad) + "px";
+    ring.style.width = Math.round(r.width + pad * 2) + "px";
+    ring.style.height = Math.round(r.height + pad * 2) + "px";
+  }
+
+  var timer = 0;
+  function finish() {
+    window.clearTimeout(timer);
+    window.removeEventListener("resize", position);
+    document.removeEventListener("pointerdown", finish);
+    document.removeEventListener("keydown", finish);
+    ring.classList.remove("is-on");
+    button.classList.remove("is-inviting");
+  }
+
+  position();
+  window.addEventListener("resize", position);
+
+  // Next frame, so the fade actually transitions from the undimmed page.
+  window.requestAnimationFrame(function () {
+    ring.classList.add("is-on");
+    button.classList.add("is-inviting");
+  });
+
+  timer = window.setTimeout(finish, INTRO_HOLD_MS);
+  document.addEventListener("pointerdown", finish);
+  document.addEventListener("keydown", finish);
 }
 
 function setupTutorial() {
@@ -233,7 +309,9 @@ function setupTutorial() {
     dots: document.getElementById("tutorial-dots"),
     back: document.getElementById("tutorial-back"),
     next: document.getElementById("tutorial-next"),
-    skip: document.getElementById("tutorial-skip")
+    skip: document.getElementById("tutorial-skip"),
+    gesture: document.getElementById("tutorial-gesture"),
+    gestureLabel: document.getElementById("tutorial-gesture-label")
   };
 
   if (typeof registerOverlayElement === "function") {
@@ -269,5 +347,5 @@ function setupTutorial() {
     }
   });
 
-  if (!tutorialHasBeenSeen()) startTutorial(0);
+  playTutorialIntro();
 }
