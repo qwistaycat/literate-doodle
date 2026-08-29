@@ -458,6 +458,25 @@ canvas {
   animation-delay: 0.9s;
 }
 
+/* The mini chart fills the bottom of the stage, so the zoom arrows stack in the
+   top-left corner instead of above and below the hand. */
+[data-gesture="bars-zoom"] .gesture-arrow {
+  left: 16px;
+  margin-left: 0;
+  animation: gesture-arrow-pulse 2.6s ease-in-out infinite;
+}
+
+[data-gesture="bars-zoom"] .gesture-arrow-up {
+  top: 3px;
+  bottom: auto;
+}
+
+[data-gesture="bars-zoom"] .gesture-arrow-down {
+  top: 13px;
+  bottom: auto;
+  animation-delay: 1.3s;
+}
+
 /* Anchored so the fingertip, not the box corner, sits at the animated point. */
 .gesture-hand {
   position: absolute;
@@ -492,7 +511,9 @@ canvas {
 
 [data-gesture="drag-x"] .gesture-dot,
 [data-gesture="drag-y"] .gesture-dot,
-[data-gesture="rotate"] .gesture-dot {
+[data-gesture="rotate"] .gesture-dot,
+[data-gesture="bars-range"] .gesture-dot,
+[data-gesture="bars-height"] .gesture-dot {
   opacity: 1;
   background: rgba(163, 204, 178, 0.4);
 }
@@ -505,6 +526,12 @@ canvas {
   background: none;
   border: 2px solid rgba(163, 204, 178, 0.9);
   animation: gesture-ripple 1.9s ease-out infinite;
+}
+
+/* Clicking a bar echoes the chart's own warm hover ring rather than the mint. */
+[data-gesture="bars-tap"] .gesture-dot {
+  background: none;
+  border: 2px solid rgba(255, 235, 170, 0.95);
 }
 
 /* Ping-ponging beats a one-way sweep: no blink, no snap back to the start. */
@@ -564,16 +591,179 @@ canvas {
   40% { opacity: 1; }
 }
 
+/* ---- Spectrum gestures: the hand acts on a miniature bar chart ---- */
+
+/* The bar chart was the part people could not read, so its hints show what is
+   being acted on and not just the hand doing it. Colours match the real chart:
+   red bars, a warm hover ring, a mint range band. */
+.gesture-bars {
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  display: flex;
+  align-items: flex-end;
+  height: 24px;
+  transform: translateX(-50%);
+  opacity: 0;
+}
+
+[data-gesture^="bars-"] .gesture-bars {
+  opacity: 1;
+}
+
+.gesture-bar {
+  width: 3px;
+  margin: 0 0.5px;
+  border-radius: 1px 1px 0 0;
+  background: #c94848;
+  transform-origin: bottom;
+}
+
+/* A plausible spectrum silhouette: loud low terms trailing off into detail. */
+.gesture-bar:nth-child(1) { height: 22px; }
+.gesture-bar:nth-child(2) { height: 19px; }
+.gesture-bar:nth-child(3) { height: 21px; }
+.gesture-bar:nth-child(4) { height: 14px; }
+.gesture-bar:nth-child(5) { height: 16px; }
+.gesture-bar:nth-child(6) { height: 12px; }
+.gesture-bar:nth-child(7) { height: 13px; }
+.gesture-bar:nth-child(8) { height: 8px; }
+.gesture-bar:nth-child(9) { height: 10px; }
+.gesture-bar:nth-child(10) { height: 6px; }
+.gesture-bar:nth-child(11) { height: 7px; }
+
+/* The range band, matching the full-height mint rectangle the chart brushes out. */
+.gesture-band {
+  position: absolute;
+  left: 0;
+  top: -21px;
+  bottom: -3px;
+  width: 0;
+  border: 1px solid rgba(190, 230, 205, 0.85);
+  border-radius: 4px;
+  background: rgba(190, 230, 205, 0.18);
+  opacity: 0;
+}
+
+/* Zoom: the bars widen and push their neighbours off the edges of the stage,
+   which is what scrolling over the real chart does to the visible window. */
+[data-gesture="bars-zoom"] .gesture-bar {
+  animation: gesture-bars-zoom 2.6s ease-in-out infinite alternate;
+}
+
+[data-gesture="bars-zoom"] .gesture-hand {
+  animation: gesture-scroll 2.6s ease-in-out infinite;
+}
+
+/* Tap: the hand comes down on a bar, then lifts clear so the bar it just picked
+   is actually visible. A hand resting on its target hides the whole point. */
+[data-gesture="bars-tap"] .gesture-hand {
+  margin-left: -19px;
+  animation: gesture-bars-tap 2.2s ease-in-out infinite;
+}
+
+[data-gesture="bars-tap"] .gesture-dot {
+  animation: gesture-bars-ripple 2.2s ease-out infinite;
+}
+
+[data-gesture="bars-tap"] .gesture-bar:nth-child(3) {
+  animation: gesture-bar-select 2.2s ease-in-out infinite;
+}
+
+/* Range: the band grows out under the hand as it sweeps sideways. */
+[data-gesture="bars-range"] .gesture-hand {
+  animation: gesture-bars-sweep 1.6s ease-in-out infinite alternate;
+}
+
+[data-gesture="bars-range"] .gesture-band {
+  opacity: 1;
+  animation: gesture-band-grow 1.6s ease-in-out infinite alternate;
+}
+
+/* Height: a range is already selected on the left, and the hand drags clear of it
+   -- the real chart scales the selection wherever on it you drag. */
+[data-gesture="bars-height"] .gesture-hand {
+  animation: gesture-drag-y 1.5s ease-in-out infinite alternate;
+}
+
+[data-gesture="bars-height"] .gesture-band {
+  opacity: 1;
+  left: -1px;
+  width: 14px;
+}
+
+[data-gesture="bars-height"] .gesture-bar:nth-child(1),
+[data-gesture="bars-height"] .gesture-bar:nth-child(2),
+[data-gesture="bars-height"] .gesture-bar:nth-child(3) {
+  animation: gesture-bar-lift 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes gesture-bars-zoom {
+  from { width: 3px; margin: 0 0.5px; }
+  to { width: 8px; margin: 0 1.5px; }
+}
+
+@keyframes gesture-bars-tap {
+  0%, 8% { transform: translate(12px, -24px); }
+  20%, 30% { transform: translate(0, 1px); }
+  45%, 100% { transform: translate(12px, -24px); }
+}
+
+@keyframes gesture-bars-ripple {
+  0%, 18% { transform: scale(0.4); opacity: 0; }
+  24% { transform: scale(0.5); opacity: 0.95; }
+  52%, 100% { transform: scale(2.1); opacity: 0; }
+}
+
+@keyframes gesture-bar-select {
+  0%, 20% { background: #c94848; box-shadow: none; }
+  26%, 100% { background: #ffdc8c; box-shadow: 0 0 0 1px rgba(255, 235, 170, 0.95); }
+}
+
+@keyframes gesture-bars-sweep {
+  from { transform: translate(-20px, 0); }
+  to { transform: translate(18px, 0); }
+}
+
+@keyframes gesture-band-grow {
+  from { width: 4px; }
+  to { width: 40px; }
+}
+
+/* The hand starts high and ends low, so the bars run tall to short to match. */
+@keyframes gesture-bar-lift {
+  from { transform: scaleY(1.35); }
+  to { transform: scaleY(0.5); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gesture-hand,
   .gesture-dot,
-  .gesture-arrow {
+  .gesture-arrow,
+  .gesture-bar,
+  .gesture-band {
     animation: none !important;
   }
 
   [data-gesture="scroll"] .gesture-arrow,
-  [data-gesture="tap"] .gesture-dot {
+  [data-gesture="bars-zoom"] .gesture-arrow,
+  [data-gesture="tap"] .gesture-dot,
+  [data-gesture="bars-tap"] .gesture-dot {
     opacity: 0.9;
+  }
+
+  /* Without motion the hints still need to show their end state. */
+  [data-gesture="bars-range"] .gesture-band {
+    width: 40px;
+  }
+
+  [data-gesture="bars-height"] .gesture-band {
+    width: 14px;
+  }
+
+  [data-gesture="bars-tap"] .gesture-bar:nth-child(3) {
+    background: #ffdc8c;
+    box-shadow: 0 0 0 1px rgba(255, 235, 170, 0.95);
   }
 }
 

@@ -32,18 +32,31 @@ var TUTORIAL_STEPS = [
   },
   {
     title: "The frequency spectrum",
-    body: "One bar per term, tallest first. Click a bar to select that ring. Drag horizontally to select a range of them, or vertically to push their amplitudes up and down and watch the drawing distort.",
+    body: "One bar per term, low frequencies on the left. There are thousands of them, so the chart shows a window at a time. Scroll over it to zoom in until the bars separate, and shift-scroll to slide the window along. The label on the right says which terms you are looking at.",
+    region: "barChart",
+    placement: "above",
+    gestures: [{ type: "bars-zoom", label: "Scroll over the chart to zoom in on the bars" }]
+  },
+  {
+    title: "Select one bar, or a whole range",
+    body: "Click a bar to select that ring \u2014 the whole column counts, so even the quiet terms are easy to hit. Drag sideways to sweep out a range, or hold Shift or \u2318 and click to add bars one at a time.",
     region: "barChart",
     placement: "above",
     gestures: [
-      { type: "tap", label: "Tap a bar to select that ring" },
-      { type: "drag-x", label: "Drag sideways to select a range" },
-      { type: "drag-y", label: "Drag up or down to reshape them" }
+      { type: "bars-tap", label: "Click a bar to select that one ring" },
+      { type: "bars-range", label: "Drag sideways to select every bar you cross" }
     ]
   },
   {
+    title: "Drag the selection taller or shorter",
+    body: "With bars selected, drag up or down on the chart to scale their amplitudes together. Taller bars mean bigger circles, and the drawing stretches with them. Every bar is also tinted by its phase offset, so red means untouched.",
+    region: "barChart",
+    placement: "above",
+    gestures: [{ type: "bars-height", label: "Drag up or down to change their height" }]
+  },
+  {
     title: "Shift the phase",
-    body: "With a ring selected, this wheel sets where that circle starts its rotation. Drag around it to rotate that one frequency out of step with the rest.",
+    body: "With a ring selected, this wheel sets where that circle starts its rotation. Drag around it to rotate that one frequency out of step with the rest \u2014 its bar in the spectrum changes hue to match.",
     region: "phaseWheel",
     placement: "left",
     gestures: [{ type: "rotate", label: "Drag around the wheel to shift phase" }],
