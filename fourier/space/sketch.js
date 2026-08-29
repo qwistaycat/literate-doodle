@@ -53,6 +53,16 @@ var pendingBarStartY = 0;
 var pendingBarGestureMode = "";
 var sinePlotBounds = null;
 var isScrubbingSine = false;
+var pointerOverOverlayUI = false;
+var barChartBounds = null;
+
+// The spectrum shows a window of terms rather than all of them at once: with a
+// few thousand bars in a few hundred pixels they overlap into a solid mass and
+// stop reading as bars at all. Scrolling widens or narrows this window.
+var barViewStart = 0;
+var barViewCount = 0;
+var BAR_SLOT_TARGET_PX = 9;
+var MIN_BAR_VIEW_COUNT = 6;
 
 function isRingSelected(index) {
   return selectedRingIndices.indexOf(index) >= 0;
@@ -102,6 +112,7 @@ function isMultiSelectEvent(mouseEvent) {
 }
 
 function isInSinePlot(sx, sy) {
+  if (pointerOverOverlayUI) return false;
   if (!sinePlotBounds) return false;
   return sx >= sinePlotBounds.x && sx <= sinePlotBounds.x + sinePlotBounds.w && sy >= sinePlotBounds.y && sy <= sinePlotBounds.y + sinePlotBounds.h;
 }
@@ -393,6 +404,7 @@ function getPhaseWheelGeometry(panel) {
 }
 
 function isInPhaseWheel(sx, sy) {
+  if (pointerOverOverlayUI) return false;
   if (!phaseWheelGeom || selectedRingIndex < 0) return false;
   var dx = sx - phaseWheelGeom.cx;
   var dy = sy - phaseWheelGeom.cy;
@@ -514,19 +526,76 @@ function getPaneLayout() {
 }
 
 function inLeftPane(sx, sy) {
+  if (pointerOverOverlayUI) return false;
   var layout = getPaneLayout();
   return sx >= layout.left.x && sx <= layout.left.x + layout.left.w && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
 }
 
+// The whole column is the hit target, not just the drawn bar -- a quiet term is
+// only a couple of pixels tall and would be almost impossible to click.
 function findBarAt(sx, sy) {
+  if (pointerOverOverlayUI) return -1;
   if (!barChartItems || barChartItems.length === 0) return -1;
   for (var i = 0; i < barChartItems.length; i++) {
     var bar = barChartItems[i];
-    if (sx >= bar.x && sx <= bar.x + bar.w && sy >= bar.y && sy <= bar.y + bar.h) {
+    if (sx >= bar.slotX && sx <= bar.slotX + bar.slotW && sy >= bar.colY && sy <= bar.colY + bar.colH) {
       return i;
     }
   }
   return -1;
+}
+
+function isInBarChart(sx, sy) {
+  if (pointerOverOverlayUI) return false;
+  if (!barChartBounds) return false;
+  return sx >= barChartBounds.x && sx <= barChartBounds.x + barChartBounds.w &&
+    sy >= barChartBounds.y && sy <= barChartBounds.y + barChartBounds.h;
+}
+
+function clampBarView(totalTerms, plotWidth) {
+  if (totalTerms <= 0) {
+    barViewStart = 0;
+    barViewCount = 0;
+    return;
+  }
+  if (barViewCount <= 0) {
+    // Open on a slice wide enough that each bar is a bar, not a hairline.
+    barViewCount = Math.min(totalTerms, Math.max(MIN_BAR_VIEW_COUNT, Math.round(plotWidth / BAR_SLOT_TARGET_PX)));
+  }
+  var lowest = Math.min(MIN_BAR_VIEW_COUNT, totalTerms);
+  barViewCount = Math.round(clamp(barViewCount, lowest, totalTerms));
+  barViewStart = Math.round(clamp(barViewStart, 0, totalTerms - barViewCount));
+}
+
+// barChartItems only holds the visible slice, so term indices need mapping back.
+function barItemForTerm(termIndex) {
+  var slot = termIndex - barViewStart;
+  if (slot < 0 || slot >= barChartItems.length) return null;
+  return barChartItems[slot];
+}
+
+// Scroll over the spectrum zooms the window around the cursor; shift-scroll (or a
+// sideways wheel) slides it along instead.
+function zoomBarViewAt(sx, event) {
+  var total = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  if (!barChartBounds || barChartBounds.w <= 1 || barViewCount <= 0) return;
+
+  var dy = event.delta || 0;
+  var dx = event.deltaX || 0;
+  if (event.shiftKey || Math.abs(dx) > Math.abs(dy)) {
+    var panBy = Math.max(1, Math.round(barViewCount * 0.18));
+    var panDir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : -1) : (dy > 0 ? 1 : -1);
+    barViewStart = Math.round(clamp(barViewStart + panDir * panBy, 0, total - barViewCount));
+    return;
+  }
+
+  var u = clamp((sx - barChartBounds.x) / barChartBounds.w, 0, 1);
+  var anchorTerm = barViewStart + u * barViewCount;
+  var lowest = Math.min(MIN_BAR_VIEW_COUNT, total);
+  var nextCount = Math.round(clamp(barViewCount * (dy > 0 ? 1.2 : 1 / 1.2), lowest, total));
+  if (nextCount === barViewCount) return;
+  barViewCount = nextCount;
+  barViewStart = Math.round(clamp(anchorTerm - u * barViewCount, 0, total - barViewCount));
 }
 
 function dividerXFromLayout(layout) {
@@ -534,6 +603,7 @@ function dividerXFromLayout(layout) {
 }
 
 function isNearDivider(sx, sy) {
+  if (pointerOverOverlayUI) return false;
   var layout = getPaneLayout();
   var dividerX = dividerXFromLayout(layout);
   return Math.abs(sx - dividerX) <= 10 && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
@@ -799,13 +869,19 @@ function drawSinePanel() {
   for (var f = 0; f < terms.length; f++) {
     maxFreq = Math.max(maxFreq, Math.abs(terms[f].freq));
   }
-  var baseY = barY + barH - 18;
-  var barTopLimit = barY + 10;
+  var baseY = barY + barH - 26;
+  var barTopLimit = barY + 36;
   var barBottomLimit = barY + barH - 10;
-  var barSlot = terms.length > 0 ? barW / terms.length : barW;
+  clampBarView(terms.length, barW);
+  var barViewEnd = barViewStart + barViewCount;
+  var barSlot = barViewCount > 0 ? barW / barViewCount : barW;
+  // Below a couple of pixels a slot cannot hold a bar plus a gap, so the chart
+  // falls back to a solid envelope rather than pretending.
+  var barsAreDiscrete = barSlot >= 2.5;
   var maxAmpSafe = Math.max(1e-9, maxAmp);
   var minDb = -72;
   barChartItems = [];
+  barChartBounds = { x: barX, y: barY, w: barW, h: barH };
 
   fill(18, 24, 35, 170);
   noStroke();
@@ -815,8 +891,9 @@ function drawSinePanel() {
   line(barX + 2, barTopLimit, barX + 2, baseY);
   line(barX, baseY, barX + barW, baseY);
 
-  for (var b = 0; b < terms.length; b++) {
+  for (var b = barViewStart; b < barViewEnd; b++) {
     var bt = terms[b];
+    if (!bt) continue;
     var absAmp = Math.abs(bt.amp);
     var normAmp = Math.max(1e-9, absAmp / maxAmpSafe);
     var ampDb = 20 * (Math.log(normAmp) / Math.LN10);
@@ -824,22 +901,34 @@ function drawSinePanel() {
     var dbNorm = (clampedDb - minDb) / (0 - minDb);
     var normH = dbNorm * (baseY - barTopLimit);
     var barHeight = Math.max(2, normH);
-    var bx = barX + b * barSlot + Math.max(1, barSlot * 0.08);
-    var bw = Math.max(3, barSlot * 0.84);
+    var slotX = barX + (b - barViewStart) * barSlot;
+    var bw = barsAreDiscrete ? Math.max(2, barSlot * 0.74) : Math.max(1, barSlot);
+    var bx = slotX + (barSlot - bw) / 2;
     var by = baseY - barHeight;
-    var barAlpha = isRingSelected(b) ? 245 : 185;
+    var selectedHere = isRingSelected(b);
+    var barAlpha = selectedHere ? 245 : 200;
     var barHue = normalizeAngle0ToTwoPi(termPhaseOffsets[b] || 0) * 180 / PI;
     colorMode(HSB, 360, 100, 100, 255);
-    fill(barHue, 76, isRingSelected(b) ? 98 : 88, barAlpha);
+    fill(barHue, 76, selectedHere ? 98 : 86, barAlpha);
+    if (barsAreDiscrete) {
+      // A rim keeps neighbouring bars from bleeding into one shape.
+      stroke(barHue, 40, selectedHere ? 100 : 30, 220);
+      strokeWeight(1);
+    } else {
+      noStroke();
+    }
     colorMode(RGB, 255, 255, 255, 255);
-    noStroke();
-    rect(bx, by, bw, barHeight, 3);
+    rect(bx, by, bw, barHeight, barsAreDiscrete ? 2 : 0);
 
     barChartItems.push({
       x: bx,
       y: by,
       w: bw,
       h: Math.max(4, baseY - by),
+      slotX: slotX,
+      slotW: barSlot,
+      colY: barTopLimit - 4,
+      colH: baseY - barTopLimit + 8,
       termIndex: b,
       freq: bt.freq,
       amp: bt.amp
@@ -849,6 +938,9 @@ function drawSinePanel() {
   hoveredBarIndex = findBarAt(mouseX, mouseY);
   if (hoveredBarIndex >= 0 && hoveredBarIndex < barChartItems.length) {
     var hb = barChartItems[hoveredBarIndex];
+    noStroke();
+    fill(255, 235, 170, 30);
+    rect(hb.slotX, hb.colY, hb.slotW, hb.colH, 3);
     noFill();
     stroke(255, 235, 170, 230);
     strokeWeight(2);
@@ -881,20 +973,54 @@ function drawSinePanel() {
   text("t = " + nf(timeTheta / PI, 1, 2) + "π", plotX + plotW - 2, plotY + 4);
   textAlign(LEFT, TOP);
 
-  var hintW = 360;
-  fill(184, 226, 199, 165);
-  noStroke();
-  rect(barX + 2, barY + 2, hintW, 18, 6);
-  fill(18, 24, 20, 230);
   textSize(10);
-  text("Horizontal drag = multi-select range • Vertical drag = adjust selected bars", barX + 8, barY + 6);
+  var viewLabel = "terms " + (barViewStart + 1) + "–" + barViewEnd + " of " + terms.length;
+  var viewLabelW = textWidth(viewLabel);
+
+  // The long hint only earns its space on a wide enough chart; below that the
+  // short form still names the gesture people are least likely to guess, and
+  // narrower still it gives way to the readout entirely.
+  var hintFull = "Scroll = zoom • Drag sideways = select a range • Drag up/down = change height";
+  var hintShort = "Scroll = zoom • Drag = select";
+  var roomFor = function (label) { return textWidth(label) + 12 + viewLabelW + 14 <= barW; };
+  var hintLabel = roomFor(hintFull) ? hintFull : hintShort;
+  if (roomFor(hintLabel)) {
+    var hintW = textWidth(hintLabel) + 12;
+    fill(184, 226, 199, 165);
+    noStroke();
+    rect(barX + 2, barY + 4, hintW, 18, 6);
+    fill(18, 24, 20, 230);
+    text(hintLabel, barX + 8, barY + 8);
+  }
+
+  // Which slice of the spectrum is on screen, over the track showing where that
+  // slice falls in the whole thing. Both live above the bars: the bottom-right
+  // corner of the canvas belongs to the write-up button.
+  fill(205, 215, 240, 165);
+  textAlign(RIGHT, TOP);
+  text(viewLabel, barX + barW - 4, barY + 8);
+  textAlign(LEFT, TOP);
+
+  var trackY = barY + 26;
+
+  noStroke();
+  fill(120, 132, 168, 55);
+  rect(barX, trackY, barW, 4, 2);
+  if (terms.length > 0) {
+    var winX = barX + (barViewStart / terms.length) * barW;
+    var winW = Math.max(8, (barViewCount / terms.length) * barW);
+    fill(184, 226, 199, 205);
+    rect(Math.min(winX, barX + barW - winW), trackY, winW, 4, 2);
+  }
 
   if (isBrushingBarSelection && barSelectionAnchorIndex >= 0 && barSelectionCurrentIndex >= 0) {
-    var r1 = Math.min(barSelectionAnchorIndex, barSelectionCurrentIndex);
-    var r2 = Math.max(barSelectionAnchorIndex, barSelectionCurrentIndex);
-    if (barChartItems[r1] && barChartItems[r2]) {
-      var sx = barChartItems[r1].x - 2;
-      var ex = barChartItems[r2].x + barChartItems[r2].w + 2;
+    var r1 = Math.max(barViewStart, Math.min(barSelectionAnchorIndex, barSelectionCurrentIndex));
+    var r2 = Math.min(barViewEnd - 1, Math.max(barSelectionAnchorIndex, barSelectionCurrentIndex));
+    var brushFrom = barItemForTerm(r1);
+    var brushTo = barItemForTerm(r2);
+    if (r2 >= r1 && brushFrom && brushTo) {
+      var sx = brushFrom.slotX;
+      var ex = brushTo.slotX + brushTo.slotW;
       fill(190, 230, 205, 45);
       stroke(190, 230, 205, 230);
       strokeWeight(2);
@@ -1111,6 +1237,10 @@ function setup() {
       resetPlayInteraction();
     });
   }
+
+  registerOverlayElement(document.getElementById("medium-link"));
+
+  if (typeof setupTutorial === "function") setupTutorial();
 
   loadSelectedDrawing();
 }
@@ -1562,6 +1692,7 @@ function draw() {
 }
 
 function mousePressed(mouseEvent) {
+  if (pointerOverOverlayUI) return;
   if (isNearDivider(mouseX, mouseY)) {
     isDraggingDivider = true;
     return;
@@ -1767,6 +1898,13 @@ function mouseReleased() {
 }
 
 function mouseWheel(event) {
+  if (pointerOverOverlayUI) return;
+
+  if (isInBarChart(mouseX, mouseY)) {
+    zoomBarViewAt(mouseX, event);
+    return false;
+  }
+
   if (viewMode === "3d") {
     if (!inLeftPane(mouseX, mouseY)) return false;
     var maxOffset = Math.max(0, parameterSlices.length - timelineVisibleCount);
@@ -1780,4 +1918,80 @@ function mouseWheel(event) {
   var delta = event.delta > 0 ? -0.08 : 0.08;
   viewZoom = clamp(viewZoom + delta, 0.5, 4);
   return false;
+}
+
+function isCanvasGestureActive() {
+  return isDraggingDivider ||
+    isDraggingAmplitude ||
+    isDraggingBarAmplitude ||
+    isDraggingPhaseWheel ||
+    isDragging3DRotate ||
+    isScrubbingSine ||
+    isBrushingBarSelection ||
+    pendingBarGesture;
+}
+
+function registerOverlayElement(el) {
+  if (!el) return;
+
+  // p5 binds mouse events to the window, so the canvas would otherwise react to
+  // clicks that land on floating UI. Suppress that while the pointer is over the
+  // element, but never mid-gesture -- a drag started on a bar must survive
+  // passing over it.
+  function markOver() {
+    if (!isCanvasGestureActive()) pointerOverOverlayUI = true;
+  }
+  el.addEventListener("mouseenter", markOver);
+  el.addEventListener("mousemove", markOver);
+  el.addEventListener("mouseleave", function () {
+    pointerOverOverlayUI = false;
+  });
+}
+
+// Viewport-space rects for the regions the sketch draws itself, so the tutorial
+// can highlight them the same way it highlights ordinary DOM elements.
+function getTutorialTargetRect(name) {
+  var canvasEl = document.querySelector("canvas");
+  if (!canvasEl) return null;
+  var origin = canvasEl.getBoundingClientRect();
+
+  function toViewport(x, y, w, h) {
+    if (!isFinite(x) || !isFinite(y) || w <= 0 || h <= 0) return null;
+    return { left: origin.left + x, top: origin.top + y, width: w, height: h };
+  }
+
+  if (name === "epicycleCanvas") {
+    var left = getPaneLayout().left;
+    return toViewport(left.x, left.y, left.w, left.h);
+  }
+
+  if (name === "sinePlot") {
+    if (!sinePlotBounds) return null;
+    return toViewport(sinePlotBounds.x, sinePlotBounds.y, sinePlotBounds.w, sinePlotBounds.h);
+  }
+
+  if (name === "barChart") {
+    if (!barChartBounds) return null;
+    return toViewport(barChartBounds.x, barChartBounds.y, barChartBounds.w, barChartBounds.h);
+  }
+
+  if (name === "phaseWheel") {
+    if (!phaseWheelGeom) return null;
+    var pad = 10;
+    var r = phaseWheelGeom.rOuter + pad;
+    return toViewport(phaseWheelGeom.cx - r, phaseWheelGeom.cy - r, r * 2, r * 2);
+  }
+
+  return null;
+}
+
+// The phase wheel only exists while a ring is selected, so the tutorial needs a
+// selection in place before it can point at it.
+function tutorialSelectSampleRing() {
+  if (!fourierX || fourierX.length === 0) return false;
+  if (selectedRingIndex >= 0) return true;
+  var activeCount = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  setSingleRingSelection(Math.min(3, activeCount - 1));
+  updateSelectedRingInfo();
+  return true;
 }
