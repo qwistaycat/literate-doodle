@@ -205,3 +205,155 @@ canvas {
     padding: 7px 11px;
   }
 }
+
+/* ---- Guided tutorial ---- */
+
+#tutorial {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease;
+}
+
+#tutorial.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The huge spread shadow dims everything except the highlighted rect. */
+#tutorial-spotlight {
+  position: absolute;
+  border: 1px solid rgba(200, 226, 210, 0.85);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(4, 3, 8, 0.62), 0 0 18px rgba(160, 210, 180, 0.35);
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+#tutorial-popup {
+  position: absolute;
+  width: 302px;
+  max-width: calc(100vw - 24px);
+  padding: 12px 14px 10px;
+  background: rgba(16, 13, 23, 0.97);
+  border: 1px solid #6a5a86;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  font-family: sans-serif;
+  color: #ded3ef;
+  pointer-events: auto;
+}
+
+.tutorial-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tutorial-counter {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #9a86bb;
+  font-variant-numeric: tabular-nums;
+}
+
+#tutorial-popup h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0e6ff;
+}
+
+#tutorial-body {
+  margin: 0 0 11px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #cbc2dd;
+}
+
+.tutorial-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+
+.tutorial-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #443a58;
+}
+
+.tutorial-dot.is-active {
+  background: #a3ccb2;
+}
+
+.tutorial-nav {
+  display: flex;
+  gap: 6px;
+}
+
+#tutorial-popup button {
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.tutorial-skip {
+  background: transparent;
+  border: 0;
+  padding: 4px 2px;
+  font-size: 10.5px;
+  color: #8f84a8;
+  text-decoration: underline;
+}
+
+.tutorial-skip:hover {
+  color: #cbc2dd;
+}
+
+.tutorial-back {
+  background: #191622;
+  border: 1px solid #4b3f63;
+  color: #b9addb;
+  font-size: 11px;
+  padding: 4px 9px;
+}
+
+.tutorial-back:hover:not(:disabled) {
+  background: #241f30;
+}
+
+.tutorial-back:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tutorial-next {
+  background: rgba(129, 176, 147, 0.26);
+  border: 1px solid #81b093;
+  color: #dff4e4;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 13px;
+}
+
+.tutorial-next:hover {
+  background: rgba(129, 176, 147, 0.42);
+}
+
+#start-tutorial {
+  border-color: #6a8f77;
+  color: #d9f2de;
+}

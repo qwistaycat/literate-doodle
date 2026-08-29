@@ -2,7 +2,7 @@
 <html>
   <head>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.2.0/p5.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css?v=20260828b">
+    <link rel="stylesheet" type="text/css" href="style.css?v=20260828c">
     <meta charset="utf-8" />
   </head>
   <body>
@@ -17,6 +17,7 @@
       <button id="toggle-path-mode" type="button">Path: Full</button>
       <button id="toggle-epicycles" type="button">Hide epicycles</button>
       <button id="reset-play" type="button">Reset Changes</button>
+      <button id="start-tutorial" type="button">Tutorial</button>
       <span id="selected-ring-info" class="hint">Selected: none</span>
     </div>
 
@@ -28,9 +29,29 @@
       <span class="medium-arrow">&#8594;</span>
     </a>
 
+    <div id="tutorial" aria-hidden="true">
+      <div id="tutorial-spotlight"></div>
+      <div id="tutorial-popup" role="dialog" aria-labelledby="tutorial-title" aria-describedby="tutorial-body">
+        <div class="tutorial-head">
+          <span id="tutorial-counter" class="tutorial-counter">1 / 8</span>
+          <h3 id="tutorial-title">&nbsp;</h3>
+        </div>
+        <p id="tutorial-body">&nbsp;</p>
+        <div class="tutorial-foot">
+          <button id="tutorial-skip" type="button" class="tutorial-skip">Skip tutorial</button>
+          <span id="tutorial-dots" class="tutorial-dots"></span>
+          <span class="tutorial-nav">
+            <button id="tutorial-back" type="button" class="tutorial-back">Back</button>
+            <button id="tutorial-next" type="button" class="tutorial-next">Next</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <script src="ct.js?v=20260407"></script>
     <script src="svg-parser.js?v=20260407"></script>
     <script src="fourier-core.js?v=20260508"></script>
-    <script src="sketch.js?v=20260828b"></script>
+    <script src="sketch.js?v=20260828c"></script>
+    <script src="tutorial.js?v=20260828c"></script>
   </body>
 </html>

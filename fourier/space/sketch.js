@@ -53,7 +53,8 @@ var pendingBarStartY = 0;
 var pendingBarGestureMode = "";
 var sinePlotBounds = null;
 var isScrubbingSine = false;
-var pointerOverMediumLink = false;
+var pointerOverOverlayUI = false;
+var barChartBounds = null;
 
 function isRingSelected(index) {
   return selectedRingIndices.indexOf(index) >= 0;
@@ -103,7 +104,7 @@ function isMultiSelectEvent(mouseEvent) {
 }
 
 function isInSinePlot(sx, sy) {
-  if (pointerOverMediumLink) return false;
+  if (pointerOverOverlayUI) return false;
   if (!sinePlotBounds) return false;
   return sx >= sinePlotBounds.x && sx <= sinePlotBounds.x + sinePlotBounds.w && sy >= sinePlotBounds.y && sy <= sinePlotBounds.y + sinePlotBounds.h;
 }
@@ -395,7 +396,7 @@ function getPhaseWheelGeometry(panel) {
 }
 
 function isInPhaseWheel(sx, sy) {
-  if (pointerOverMediumLink) return false;
+  if (pointerOverOverlayUI) return false;
   if (!phaseWheelGeom || selectedRingIndex < 0) return false;
   var dx = sx - phaseWheelGeom.cx;
   var dy = sy - phaseWheelGeom.cy;
@@ -517,13 +518,13 @@ function getPaneLayout() {
 }
 
 function inLeftPane(sx, sy) {
-  if (pointerOverMediumLink) return false;
+  if (pointerOverOverlayUI) return false;
   var layout = getPaneLayout();
   return sx >= layout.left.x && sx <= layout.left.x + layout.left.w && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
 }
 
 function findBarAt(sx, sy) {
-  if (pointerOverMediumLink) return -1;
+  if (pointerOverOverlayUI) return -1;
   if (!barChartItems || barChartItems.length === 0) return -1;
   for (var i = 0; i < barChartItems.length; i++) {
     var bar = barChartItems[i];
@@ -539,7 +540,7 @@ function dividerXFromLayout(layout) {
 }
 
 function isNearDivider(sx, sy) {
-  if (pointerOverMediumLink) return false;
+  if (pointerOverOverlayUI) return false;
   var layout = getPaneLayout();
   var dividerX = dividerXFromLayout(layout);
   return Math.abs(sx - dividerX) <= 10 && sy >= layout.left.y && sy <= layout.left.y + layout.left.h;
@@ -812,6 +813,7 @@ function drawSinePanel() {
   var maxAmpSafe = Math.max(1e-9, maxAmp);
   var minDb = -72;
   barChartItems = [];
+  barChartBounds = { x: barX, y: barY, w: barW, h: barH };
 
   fill(18, 24, 35, 170);
   noStroke();
@@ -1118,7 +1120,9 @@ function setup() {
     });
   }
 
-  setupMediumLink();
+  registerOverlayElement(document.getElementById("medium-link"));
+
+  if (typeof setupTutorial === "function") setupTutorial();
 
   loadSelectedDrawing();
 }
@@ -1570,7 +1574,7 @@ function draw() {
 }
 
 function mousePressed(mouseEvent) {
-  if (pointerOverMediumLink) return;
+  if (pointerOverOverlayUI) return;
   if (isNearDivider(mouseX, mouseY)) {
     isDraggingDivider = true;
     return;
@@ -1776,7 +1780,7 @@ function mouseReleased() {
 }
 
 function mouseWheel(event) {
-  if (pointerOverMediumLink) return;
+  if (pointerOverOverlayUI) return;
   if (viewMode === "3d") {
     if (!inLeftPane(mouseX, mouseY)) return false;
     var maxOffset = Math.max(0, parameterSlices.length - timelineVisibleCount);
@@ -1803,19 +1807,67 @@ function isCanvasGestureActive() {
     pendingBarGesture;
 }
 
-function setupMediumLink() {
-  var link = document.getElementById("medium-link");
-  if (!link) return;
+function registerOverlayElement(el) {
+  if (!el) return;
 
   // p5 binds mouse events to the window, so the canvas would otherwise react to
-  // clicks that land on this button. Suppress that while the pointer is over it,
-  // but never mid-gesture -- a drag started on a bar must survive passing over.
+  // clicks that land on floating UI. Suppress that while the pointer is over the
+  // element, but never mid-gesture -- a drag started on a bar must survive
+  // passing over it.
   function markOver() {
-    if (!isCanvasGestureActive()) pointerOverMediumLink = true;
+    if (!isCanvasGestureActive()) pointerOverOverlayUI = true;
   }
-  link.addEventListener("mouseenter", markOver);
-  link.addEventListener("mousemove", markOver);
-  link.addEventListener("mouseleave", function () {
-    pointerOverMediumLink = false;
+  el.addEventListener("mouseenter", markOver);
+  el.addEventListener("mousemove", markOver);
+  el.addEventListener("mouseleave", function () {
+    pointerOverOverlayUI = false;
   });
+}
+
+// Viewport-space rects for the regions the sketch draws itself, so the tutorial
+// can highlight them the same way it highlights ordinary DOM elements.
+function getTutorialTargetRect(name) {
+  var canvasEl = document.querySelector("canvas");
+  if (!canvasEl) return null;
+  var origin = canvasEl.getBoundingClientRect();
+
+  function toViewport(x, y, w, h) {
+    if (!isFinite(x) || !isFinite(y) || w <= 0 || h <= 0) return null;
+    return { left: origin.left + x, top: origin.top + y, width: w, height: h };
+  }
+
+  if (name === "epicycleCanvas") {
+    var left = getPaneLayout().left;
+    return toViewport(left.x, left.y, left.w, left.h);
+  }
+
+  if (name === "sinePlot") {
+    if (!sinePlotBounds) return null;
+    return toViewport(sinePlotBounds.x, sinePlotBounds.y, sinePlotBounds.w, sinePlotBounds.h);
+  }
+
+  if (name === "barChart") {
+    if (!barChartBounds) return null;
+    return toViewport(barChartBounds.x, barChartBounds.y, barChartBounds.w, barChartBounds.h);
+  }
+
+  if (name === "phaseWheel") {
+    if (!phaseWheelGeom) return null;
+    var pad = 10;
+    var r = phaseWheelGeom.rOuter + pad;
+    return toViewport(phaseWheelGeom.cx - r, phaseWheelGeom.cy - r, r * 2, r * 2);
+  }
+
+  return null;
+}
+
+// The phase wheel only exists while a ring is selected, so the tutorial needs a
+// selection in place before it can point at it.
+function tutorialSelectSampleRing() {
+  if (!fourierX || fourierX.length === 0) return false;
+  if (selectedRingIndex >= 0) return true;
+  var activeCount = Math.max(1, Math.min(maxEpicycles, fourierX.length));
+  setSingleRingSelection(Math.min(3, activeCount - 1));
+  updateSelectedRingInfo();
+  return true;
 }
